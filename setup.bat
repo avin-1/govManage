@@ -14,10 +14,10 @@ cd /d "%~dp0"
 :: ────────────────────────────────────────────────────────────────────────────
 echo [1/5] Checking for uv (Python package manager)...
 where uv >nul 2>&1
-if %ERRORLEVEL% neq 0 (
+if !ERRORLEVEL! neq 0 (
     echo  uv not found. Installing uv via PowerShell...
-    powershell -ExecutionPolicy Bypass -Command "irm https://astral.sh/uv/install.ps1 | iex"
-    if %ERRORLEVEL% neq 0 (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://astral.sh/uv/install.ps1 | iex"
+    if !ERRORLEVEL! neq 0 (
         echo [ERROR] Failed to install uv. Please install it manually:
         echo         https://docs.astral.sh/uv/getting-started/installation/
         pause
@@ -43,15 +43,15 @@ echo.
 :: ────────────────────────────────────────────────────────────────────────────
 echo [2/5] Checking for Node.js...
 where node >nul 2>&1
-if %ERRORLEVEL% neq 0 (
+if !ERRORLEVEL! neq 0 (
     echo [ERROR] Node.js is not installed.
-    echo         Please download and install Node.js (LTS) from https://nodejs.org/
+    echo         Please download and install Node.js ^(LTS^) from https://nodejs.org/
     echo         Then re-run this script.
     pause
     exit /b 1
 )
-for /f "tokens=*" %%v in ('node --version') do set NODE_VER=%%v
-echo  Node.js %NODE_VER% is available.
+node --version
+echo  Node.js is available.
 echo.
 
 :: ────────────────────────────────────────────────────────────────────────────
@@ -60,7 +60,7 @@ echo.
 echo [3/5] Setting up Python 3.13 and installing dependencies...
 uv python install 3.13
 uv sync
-if %ERRORLEVEL% neq 0 (
+if !ERRORLEVEL! neq 0 (
     echo [ERROR] uv setup failed. Check pyproject.toml or your connection.
     pause
     exit /b 1
@@ -74,7 +74,7 @@ echo.
 echo [4/5] Installing frontend (React/Vite) dependencies...
 cd /d "%~dp0frontend"
 npm install
-if %ERRORLEVEL% neq 0 (
+if !ERRORLEVEL! neq 0 (
     echo [ERROR] npm install failed inside the frontend folder.
     pause
     exit /b 1

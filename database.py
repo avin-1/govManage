@@ -49,6 +49,15 @@ class MockMongoDB:
 # Initialize global Mock MongoDB
 db = MockMongoDB()
 
+# Shared mock policy corpus used by API and ChromaDB bootstrap.
+policies = [
+    "Financial transactions above 1000 require manager approval.",
+    "External vendors cannot access sensitive IT infrastructure.",
+    "Security alerts with critical classification must auto-freeze associated accounts.",
+    "Employees can only expense up to 500 without receipt.",
+    "IT alerts requires level_2 clearance to suppress."
+]
+
 # --- MOCK CHROMADB FOR POLICY EXPERT ---
 
 def init_chroma():
@@ -60,15 +69,6 @@ def init_chroma():
         pass
     
     collection = client.create_collection("policies")
-    
-    # Let's add some mock policies
-    policies = [
-        "Financial transactions above 1000 require manager approval.",
-        "External vendors cannot access sensitive IT infrastructure.",
-        "Security alerts with critical classification must auto-freeze associated accounts.",
-        "Employees can only expense up to 500 without receipt.",
-        "IT alerts requires level_2 clearance to suppress."
-    ]
     
     # Adding to ChromaDB directly with IDs
     collection.add(

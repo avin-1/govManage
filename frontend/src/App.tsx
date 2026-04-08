@@ -1,30 +1,94 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  BarChart, Activity, FileText, Database, Settings, ShieldCheck, TriangleAlert, CheckCircle, XCircle 
-} from 'lucide-react';
-import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
+import { useEffect, useMemo, useState } from 'react';
+import { Activity, CheckCircle, Database, FileText, ShieldCheck, Sparkles, XCircle } from 'lucide-react';
+import { Chart as ChartJS, CategoryScale, Filler, Legend, LineElement, LinearScale, PointElement, Title, Tooltip } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Title, Tooltip, Legend);
 
 const API_URL = 'http://127.0.0.1:5000/api';
 
+type TriggerMode = 'minimum' | 'rule_engine' | 'advanced';
+
+type Kpis = {
+  active_policies: number;
+  compliance_pct: number;
+  citizen_satisfaction: number;
+  risk_index: number;
+};
+
+type MasterPolicy = {
+  id: string;
+  name: string;
+  sector: string;
+  risk: string;
+};
+
+type Transaction = {
+  event_id: string;
+  status: string;
+  action_taken?: string;
+  risk_level?: string;
+  tvi_score?: number;
+  timestamp?: string;
+};
+
+type RuleHit = {
+  rule_code?: string;
+  description?: string;
+  severity?: string;
+  action_on_fail?: string;
+};
+
+type DecisionResult = {
+  event_id?: string;
+  path_taken?: string;
+  action_taken?: string;
+  status?: string;
+  tvi_score?: number;
+  risk_level?: string;
+  rules_used?: RuleHit[];
+  audit_trace?: string[];
+  ai_explanation?: string | null;
+  mode?: TriggerMode;
+  error?: string;
+};
+
+type ReportResult = {
+  event_id?: string;
+  summary?: string;
+  governance_summary?: string;
+  final_action?: string;
+  audit_trace?: string[];
+  rules_used?: RuleHit[];
+  ai_explanation?: string | null;
+  timestamp?: string;
+  error?: string;
+};
+
+type EventInput = {
+  user_id: string;
+  amount: string;
+  description: string;
+  event_type: string;
+  mode: TriggerMode;
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [kpis, setKpis] = useState({ active_policies: 0, compliance_pct: 0, citizen_satisfaction: 0, risk_index: 0 });
-  const [masters, setMasters] = useState([]);
-  const [transactions, setTransactions] = useState([]);
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [simulationResult, setSimulationResult] = useState(null);
-  // New: custom event input state
-  const [eventInput, setEventInput] = useState({
+  const [kpis, setKpis] = useState<Kpis>({ active_policies: 0, compliance_pct: 0, citizen_satisfaction: 0, risk_index: 0 });
+  const [masters, setMasters] = useState<MasterPolicy[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFetchingReport, setIsFetchingReport] = useState(false);
+  const [eventInput, setEventInput] = useState<EventInput>({
     user_id: '',
     amount: '',
     description: '',
     event_type: 'financial_txn',
+    mode: 'advanced' as TriggerMode,
   });
-  const [customResult, setCustomResult] = useState(null);
-  const [latestReport, setLatestReport] = useState(null);
+  const [customResult, setCustomResult] = useState<DecisionResult | null>(null);
+  const [latestReport, setLatestReport] = useState<ReportResult | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -34,7 +98,7 @@ export default function App() {
     try {
       const p1 = fetch(`${API_URL}/kpis`).then(r => r.json());
       const p2 = fetch(`${API_URL}/masters`).then(r => r.json());
-      const p3 = fetch(`${API_URL}/transactions`).then(r => r.json());
+      const p3 = fetch(`${API_URL}/transactions?ts=${Date.now()}`, { cache: 'no-store' }).then(r => r.json());
       
       const [dataKpi, dataMasters, dataTrans] = await Promise.all([p1, p2, p3]);
       setKpis(dataKpi);
@@ -45,30 +109,9 @@ export default function App() {
     }
   };
 
-  const runSimulation = async () => {
-    setIsSimulating(true);
-    setSimulationResult(null);
-    try {
-      const res = await fetch(`${API_URL}/trigger`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          event_type: 'financial_txn',
-          payload: { user_id: 'E101', amount: 50000, description: 'Test Large Transfer' }
-        })
-      });
-      const data = await res.json();
-      setSimulationResult(data);
-      fetchData(); // Refresh UI
-    } catch (e) {
-      console.error(e);
-    }
-    setIsSimulating(false);
-  };
-
-  // New: submit custom event
-  const submitCustomEvent = async (e) => {
+  const submitCustomEvent = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setIsSubmitting(true);
     setCustomResult(null);
     try {
       const res = await fetch(`${API_URL}/trigger`, {
@@ -76,6 +119,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           event_type: eventInput.event_type,
+          mode: eventInput.mode,
           payload: {
             user_id: eventInput.user_id,
             amount: parseFloat(eventInput.amount),
@@ -83,28 +127,58 @@ export default function App() {
           }
         })
       });
-      const data = await res.json();
+      const data: DecisionResult = await res.json();
       setCustomResult(data);
-      fetchData();
+      await fetchData();
+      await fetchLatestReport();
     } catch (e) {
       setCustomResult({ error: 'Submission failed' });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  // New: fetch latest report
   const fetchLatestReport = async () => {
+    setIsFetchingReport(true);
     try {
-      const res = await fetch(`${API_URL}/reports`);
-      const reports = await res.json();
+      const res = await fetch(`${API_URL}/reports?ts=${Date.now()}`, { cache: 'no-store' });
+      const reports: ReportResult[] = await res.json();
       if (Array.isArray(reports) && reports.length > 0) {
-        setLatestReport(reports[reports.length - 1]);
+        const newest = [...reports].sort((a: ReportResult, b: ReportResult) => {
+          const ta = new Date(a.timestamp || 0).getTime();
+          const tb = new Date(b.timestamp || 0).getTime();
+          return tb - ta;
+        })[0];
+        setLatestReport(newest);
       } else {
         setLatestReport({ error: 'No reports found' });
       }
     } catch (e) {
       setLatestReport({ error: 'Failed to fetch reports' });
+    } finally {
+      setIsFetchingReport(false);
     }
   };
+
+  const trendSeries = useMemo(() => {
+    const recent = [...transactions].slice(0, 6).reverse();
+    if (recent.length > 0) {
+      return {
+        labels: recent.map((t, idx) => {
+          const suffix = t.event_id ? t.event_id.slice(-4).toUpperCase() : `${idx + 1}`;
+          return `Evt-${suffix}`;
+        }),
+        values: recent.map(t => Math.round((t.tvi_score ?? kpis.risk_index / 100) * 100)),
+      };
+    }
+
+    return {
+      labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+      values: [42, 48, 44, 50, 46, kpis.risk_index || 40],
+    };
+  }, [transactions, kpis.risk_index]);
+
+  const decisionStatusTone = customResult?.status === 'Approved' ? 'text-emerald-400' : customResult?.status === 'Review' ? 'text-amber-400' : 'text-rose-400';
 
   return (
     <div className="flex min-h-screen bg-background bg-gradient-to-br from-slate-950 via-background to-slate-900">
@@ -140,7 +214,7 @@ export default function App() {
           <div className="animate-in fade-in space-y-6">
             <h2 className="text-3xl font-light mb-6 text-white tracking-tight">Governance Intelligence</h2>
             
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               {[
                 { title: 'Policies Active', value: kpis.active_policies, color: 'text-indigo-400' },
                 { title: 'Compliance %', value: `${kpis.compliance_pct}%`, color: 'text-emerald-400' },
@@ -154,112 +228,136 @@ export default function App() {
               ))}
             </div>
 
-            <div className="grid grid-cols-2 gap-6 mt-6">
-              <div className="glass-card h-[400px]">
-                <h3 className="font-semibold text-lg text-white mb-4">Risk Index Trend</h3>
-                <Line 
-                  options={{ responsive: true, maintainAspectRatio: false, color: '#fff', scales: { x: { ticks: { color: '#94a3b8'} }, y: { ticks: { color: '#94a3b8'} } } }}
-                  data={{
-                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-                    datasets: [{
-                      label: 'Risk Score',
-                      data: [45, 52, 38, 41, 60, kpis.risk_index || 63],
-                      borderColor: '#3b82f6',
-                      backgroundColor: 'rgba(59, 130, 246, 0.2)',
-                      tension: 0.4,
-                      fill: true
-                    }]
-                  }}
-                />
+            <div className="glass-card">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
+                <div>
+                  <h3 className="font-semibold text-lg text-white">Action Input Panel</h3>
+                  <p className="text-sm text-textSecondary">Choose assessment mode, submit one event, and inspect rule hits with optional AI reasoning.</p>
+                </div>
+                <button onClick={fetchLatestReport} disabled={isFetchingReport} className="btn-primary text-sm w-full lg:w-auto">
+                  {isFetchingReport ? 'Refreshing Report...' : 'Get Latest Governance Report'}
+                </button>
               </div>
 
-              <div className="glass-card overflow-y-auto max-h-[400px]">
-                <div className="flex flex-col gap-4 mb-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-semibold text-lg text-white">Agentic Intervention Demo</h3>
-                    <button onClick={runSimulation} disabled={isSimulating} className="btn-primary text-sm">
-                      {isSimulating ? 'Running...' : 'Simulate Conflict Txn'}
-                    </button>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+                <form className="space-y-3 bg-slate-900/35 border border-cardBorder rounded-xl p-4" onSubmit={submitCustomEvent}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <input className="input" placeholder="User ID (e.g. E101)" value={eventInput.user_id} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEventInput({ ...eventInput, user_id: e.target.value })} required />
+                    <input className="input" placeholder="Amount" type="number" min="0" value={eventInput.amount} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEventInput({ ...eventInput, amount: e.target.value })} required />
                   </div>
-                  {/* New: Custom Event Input Form */}
-                  <form className="flex flex-col gap-2 bg-slate-800/40 p-3 rounded" onSubmit={submitCustomEvent}>
-                    <div className="flex gap-2">
-                      <input className="input" placeholder="User ID" value={eventInput.user_id} onChange={e => setEventInput({ ...eventInput, user_id: e.target.value })} required />
-                      <input className="input" placeholder="Amount" type="number" value={eventInput.amount} onChange={e => setEventInput({ ...eventInput, amount: e.target.value })} required />
-                    </div>
-                    <input className="input" placeholder="Description" value={eventInput.description} onChange={e => setEventInput({ ...eventInput, description: e.target.value })} required />
-                    <select className="input" value={eventInput.event_type} onChange={e => setEventInput({ ...eventInput, event_type: e.target.value })}>
+
+                  <input className="input" placeholder="Description" value={eventInput.description} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEventInput({ ...eventInput, description: e.target.value })} required />
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <select className="input" value={eventInput.event_type} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEventInput({ ...eventInput, event_type: e.target.value })}>
                       <option value="financial_txn">Financial Transaction</option>
                       <option value="security_alert">Security Alert</option>
                       <option value="policy_upload">Policy Upload</option>
                     </select>
-                    <button type="submit" className="btn-primary text-sm">Submit Custom Event</button>
-                  </form>
-                  {/* New: Fetch Latest Report Button */}
-                  <button onClick={fetchLatestReport} className="btn-primary text-sm">Get Latest Governance Report</button>
+
+                    <select className="input" value={eventInput.mode} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEventInput({ ...eventInput, mode: e.target.value as TriggerMode })}>
+                      <option value="minimum">Option 1 - Minimum (Database Rules)</option>
+                      <option value="rule_engine">Option 2 - Rule Engine</option>
+                      <option value="advanced">Option 3 - Advanced AI Reasoning</option>
+                    </select>
+                  </div>
+
+                  <button type="submit" disabled={isSubmitting} className="btn-primary text-sm w-full">
+                    {isSubmitting ? 'Submitting...' : 'Submit Event'}
+                  </button>
+                </form>
+
+                <div className="space-y-3">
+                  {customResult && (
+                    <div className="p-4 bg-slate-900/50 rounded-xl border border-cardBorder space-y-3">
+                      {customResult.error ? (
+                        <p className="text-rose-400 text-sm">{customResult.error}</p>
+                      ) : (
+                        <>
+                          <div className="flex items-start gap-3">
+                            {customResult.status === 'Approved' ? <CheckCircle className="text-emerald-400" /> : <XCircle className="text-rose-500" />}
+                            <div>
+                              <p className="font-semibold text-white">Final Action: {customResult.action_taken}</p>
+                              <p className={`text-xs ${decisionStatusTone}`}>Status: {customResult.status} | TVI: {customResult.tvi_score} ({customResult.risk_level})</p>
+                              <p className="text-xs text-slate-400 mt-1">Mode: {customResult.mode || eventInput.mode}</p>
+                            </div>
+                          </div>
+
+                          <div>
+                            <p className="text-xs uppercase text-slate-400 font-bold mb-2">Rule Hits</p>
+                            {customResult.rules_used && customResult.rules_used.length > 0 ? (
+                              <ul className="text-sm space-y-1 text-slate-300">
+                                {customResult.rules_used.map((rule, idx) => (
+                                  <li key={`${rule.rule_code || 'rule'}-${idx}`} className="leading-relaxed">- <span className="text-slate-200">{rule.rule_code || 'RULE'}</span>: {rule.description} ({rule.severity})</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-sm text-emerald-300">No rule violations detected.</p>
+                            )}
+                          </div>
+
+                          {customResult.ai_explanation && (
+                            <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-3">
+                              <p className="text-xs uppercase tracking-wider text-sky-300 font-semibold mb-1 flex items-center gap-2"><Sparkles size={14} /> AI Reasoning</p>
+                              <p className="text-sm text-slate-200 whitespace-pre-wrap">{customResult.ai_explanation}</p>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {latestReport && (
+                    <div className="p-4 bg-slate-900/50 rounded-xl border border-cardBorder space-y-2">
+                      <h4 className="font-semibold text-white">Latest Governance Report</h4>
+                      {latestReport.error ? (
+                        <p className="text-rose-400 text-sm">{latestReport.error}</p>
+                      ) : (
+                        <>
+                          <p className="text-slate-300 text-sm">Event ID: {latestReport.event_id}</p>
+                          <p className="text-slate-300 text-sm">Summary: {latestReport.summary || latestReport.governance_summary}</p>
+                          <p className="text-slate-300 text-sm">Final Action: {latestReport.final_action}</p>
+                          {latestReport.timestamp && <p className="text-xs text-slate-500">Timestamp: {new Date(latestReport.timestamp).toLocaleString()}</p>}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
-                {/* Show simulation or custom event result */}
-                {simulationResult && (
-                  <div className="mt-4 p-4 bg-slate-900/50 rounded-xl border border-slate-700 space-y-3">
-                    <div className="flex items-center gap-3">
-                      {simulationResult.path_taken === 'safe' ? <CheckCircle className="text-green-400" /> : <XCircle className="text-rose-500" />}
-                      <div>
-                        <p className="font-semibold text-white">Final Action: {simulationResult.action_taken}</p>
-                        <p className="text-xs text-textSecondary">TVI Risk: {simulationResult.tvi_score} ({simulationResult.risk_level})</p>
-                      </div>
-                    </div>
-                    <div className="mt-4">
-                      <p className="text-xs uppercase text-slate-400 font-bold mb-2">Audit Trace Reasoning:</p>
-                      <ul className="text-sm space-y-1 text-slate-300">
-                        {simulationResult.audit_trace.map((trace, idx) => (
-                          <li key={idx} className="flex gap-2"><span className="text-primary opacity-50">-</span> {trace}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                )}
-                {customResult && (
-                  <div className="mt-4 p-4 bg-slate-900/50 rounded-xl border border-slate-700 space-y-3">
-                    <div className="flex items-center gap-3">
-                      {customResult.path_taken === 'safe' ? <CheckCircle className="text-green-400" /> : <XCircle className="text-rose-500" />}
-                      <div>
-                        <p className="font-semibold text-white">Final Action: {customResult.action_taken}</p>
-                        <p className="text-xs text-textSecondary">TVI Risk: {customResult.tvi_score} ({customResult.risk_level})</p>
-                      </div>
-                    </div>
-                    <div className="mt-4">
-                      <p className="text-xs uppercase text-slate-400 font-bold mb-2">Audit Trace Reasoning:</p>
-                      <ul className="text-sm space-y-1 text-slate-300">
-                        {customResult.audit_trace && customResult.audit_trace.map((trace, idx) => (
-                          <li key={idx} className="flex gap-2"><span className="text-primary opacity-50">-</span> {trace}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                )}
-                {latestReport && (
-                  <div className="mt-4 p-4 bg-slate-900/50 rounded-xl border border-slate-700 space-y-3">
-                    <h4 className="font-semibold text-white mb-2">Latest Governance Report</h4>
-                    {latestReport.error ? (
-                      <p className="text-rose-400">{latestReport.error}</p>
-                    ) : (
-                      <>
-                        <p className="text-slate-300 text-sm">Event ID: {latestReport.event_id}</p>
-                        <p className="text-slate-300 text-sm">Summary: {latestReport.summary || latestReport.governance_summary}</p>
-                        <p className="text-slate-300 text-sm">Final Action: {latestReport.final_action}</p>
-                        <div className="mt-2">
-                          <p className="text-xs uppercase text-slate-400 font-bold mb-2">Audit Trace:</p>
-                          <ul className="text-sm space-y-1 text-slate-300">
-                            {latestReport.audit_trace && latestReport.audit_trace.map((trace, idx) => (
-                              <li key={idx} className="flex gap-2"><span className="text-primary opacity-50">-</span> {trace}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
               </div>
+            </div>
+
+            <div className="glass-card h-[360px]">
+              <h3 className="font-semibold text-lg text-white mb-1">Risk Index Trend</h3>
+              <p className="text-sm text-textSecondary mb-4">Recent event risk signal based on stored TVI values.</p>
+              <Line
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  color: '#fff',
+                  plugins: {
+                    legend: { labels: { color: '#cbd5e1' } },
+                  },
+                  scales: {
+                    x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.08)' } },
+                    y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.08)' } },
+                  },
+                }}
+                data={{
+                  labels: trendSeries.labels,
+                  datasets: [
+                    {
+                      label: 'Risk Score',
+                      data: trendSeries.values,
+                      borderColor: '#38bdf8',
+                      backgroundColor: 'rgba(56, 189, 248, 0.15)',
+                      borderWidth: 3,
+                      pointRadius: 3,
+                      tension: 0.3,
+                      fill: true,
+                    },
+                  ],
+                }}
+              />
             </div>
           </div>
         )}
@@ -309,13 +407,13 @@ export default function App() {
                   {transactions.map((t, i) => (
                     <tr key={i} className="border-b border-cardBorder/50 hover:bg-slate-800/30 transition-colors">
                       <td className="p-4 text-slate-400 text-sm uppercase">{t.event_id}</td>
-                      <td className={`p-4 text-sm font-semibold flex items-center gap-2 ${t.status === 'Approved' ? 'text-green-400' : 'text-rose-400'}`}>
-                        {t.status === 'Approved' ? <CheckCircle size={14}/> : <XCircle size={14}/>} {t.status}
+                      <td className={`p-4 text-sm font-semibold flex items-center gap-2 ${t.status === 'Approved' ? 'text-green-400' : t.status === 'Review' ? 'text-amber-400' : 'text-rose-400'}`}>
+                        {t.status === 'Approved' ? <CheckCircle size={14}/> : <XCircle size={14}/>} {t.status || t.action_taken}
                       </td>
                     </tr>
                   ))}
                   {transactions.length === 0 && (
-                    <tr><td colSpan="2" className="p-8 text-center text-slate-500">No actions recorded yet. Run a simulation!</td></tr>
+                    <tr><td colSpan={2} className="p-8 text-center text-slate-500">No actions recorded yet. Submit an event from Dashboard.</td></tr>
                   )}
                 </tbody>
               </table>

@@ -1,0 +1,14 @@
+{
+    "event_id": "1e4ca732-7b8d-439a-8806-d8571bb629b0",
+    "payload": {
+        "user_id": "E101",
+        "amount": 50000,
+        "description": "Test Large Transfer"
+    },
+    "policy_analysis_score": 0.9,
+    "matched_policies": [
+        "MaximumTransferLimit",
+        "ApprovalRequiredForLargeTransfers"
+    ],
+    "policy_conflict": true
+}

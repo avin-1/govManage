@@ -1,0 +1,10 @@
+{
+    "event_id": "6cd8476a-d9d2-455c-9c74-c686638c74fb",
+    "governance_summary": "Event 6cd8476a-d9d2-455c-9c74-c686638c74fb - Risk: Low, Compliance: OK",
+    "final_action": "Auto Blocked",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation marked the transaction as unauthorized due to amount exceeding the user's tier limit. According to the rule, any Unauthorized flag triggers a Block Path, overriding other considerations."
+    ]
+}

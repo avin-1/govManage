@@ -28,7 +28,7 @@ class AgentState(TypedDict):
     tvi_score: float
     risk_level: str
 
-model_name = os.getenv("GROQ_MODEL", "gpt-oss-120b")
+model_name = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 llm = ChatGroq(model_name=model_name)
 
 def analyze_risk(state: AgentState):

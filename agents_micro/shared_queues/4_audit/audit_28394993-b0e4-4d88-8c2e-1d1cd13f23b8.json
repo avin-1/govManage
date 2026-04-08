@@ -1,0 +1,13 @@
+{
+    "path_taken": "Block Path",
+    "action_taken": "Auto Blocked",
+    "reasoning": "Compliance evaluation indicates Authorized=False due to insufficient role information for user_id 1, which triggers an automatic block according to the decision rules.",
+    "event_id": "28394993-b0e4-4d88-8c2e-1d1cd13f23b8",
+    "tvi_score": 0.02,
+    "risk_level": "Low",
+    "audit_trace": [
+        "Policy Output: Conflict=False",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation indicates Authorized=False due to insufficient role information for user_id 1, which triggers an automatic block according to the decision rules."
+    ]
+}

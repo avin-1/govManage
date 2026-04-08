@@ -1,0 +1,13 @@
+{
+    "path_taken": "Block Path",
+    "action_taken": "Auto Blocked",
+    "reasoning": "Compliance evaluation marked the transaction as unauthorized due to exceeding the user's transfer limit, triggering an immediate block. Although the policy analyst flagged a conflict, the explicit unauthorized status overrides and mandates a Block Path.",
+    "event_id": "96f0535f-2372-438a-856a-34ac845e878d",
+    "tvi_score": 0.24,
+    "risk_level": "Low",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation marked the transaction as unauthorized due to exceeding the user's transfer limit, triggering an immediate block. Although the policy analyst flagged a conflict, the explicit unauthorized status overrides and mandates a Block Path."
+    ]
+}

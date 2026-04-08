@@ -1,0 +1,1 @@
+{"event_id": "1c762d73-bcf6-4ffb-bd54-434a9cad0e4c", "event_type": "financial_txn", "payload": {"user_id": "123", "amount": 2000, "description": "abc"}}

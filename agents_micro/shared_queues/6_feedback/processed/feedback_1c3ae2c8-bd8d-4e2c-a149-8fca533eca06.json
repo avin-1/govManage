@@ -1,0 +1,10 @@
+{
+    "event_id": "1c3ae2c8-bd8d-4e2c-a149-8fca533eca06",
+    "governance_summary": "Event 1c3ae2c8-bd8d-4e2c-a149-8fca533eca06 - Risk: Low, Compliance: OK",
+    "final_action": "Auto Blocked",
+    "audit_trace": [
+        "Policy Output: Conflict=False",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation indicates Authorized=False due to missing user role information, which overrides the low risk and no policy conflict, requiring an automatic block."
+    ]
+}

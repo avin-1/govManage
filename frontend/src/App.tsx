@@ -7,7 +7,7 @@ import { Line } from 'react-chartjs-2';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
-const API_URL = 'http://127.0.0.1:8000/api';
+const API_URL = 'http://127.0.0.1:5000/api';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -16,6 +16,15 @@ export default function App() {
   const [transactions, setTransactions] = useState([]);
   const [isSimulating, setIsSimulating] = useState(false);
   const [simulationResult, setSimulationResult] = useState(null);
+  // New: custom event input state
+  const [eventInput, setEventInput] = useState({
+    user_id: '',
+    amount: '',
+    description: '',
+    event_type: 'financial_txn',
+  });
+  const [customResult, setCustomResult] = useState(null);
+  const [latestReport, setLatestReport] = useState(null);
 
   useEffect(() => {
     fetchData();
@@ -55,6 +64,46 @@ export default function App() {
       console.error(e);
     }
     setIsSimulating(false);
+  };
+
+  // New: submit custom event
+  const submitCustomEvent = async (e) => {
+    e.preventDefault();
+    setCustomResult(null);
+    try {
+      const res = await fetch(`${API_URL}/trigger`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event_type: eventInput.event_type,
+          payload: {
+            user_id: eventInput.user_id,
+            amount: parseFloat(eventInput.amount),
+            description: eventInput.description
+          }
+        })
+      });
+      const data = await res.json();
+      setCustomResult(data);
+      fetchData();
+    } catch (e) {
+      setCustomResult({ error: 'Submission failed' });
+    }
+  };
+
+  // New: fetch latest report
+  const fetchLatestReport = async () => {
+    try {
+      const res = await fetch(`${API_URL}/reports`);
+      const reports = await res.json();
+      if (Array.isArray(reports) && reports.length > 0) {
+        setLatestReport(reports[reports.length - 1]);
+      } else {
+        setLatestReport({ error: 'No reports found' });
+      }
+    } catch (e) {
+      setLatestReport({ error: 'Failed to fetch reports' });
+    }
   };
 
   return (
@@ -125,35 +174,89 @@ export default function App() {
               </div>
 
               <div className="glass-card overflow-y-auto max-h-[400px]">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="font-semibold text-lg text-white">Agentic Intervention Demo</h3>
-                  <button onClick={runSimulation} disabled={isSimulating} className="btn-primary text-sm">
-                    {isSimulating ? 'Running...' : 'Simulate Conflict Txn'}
-                  </button>
+                <div className="flex flex-col gap-4 mb-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-semibold text-lg text-white">Agentic Intervention Demo</h3>
+                    <button onClick={runSimulation} disabled={isSimulating} className="btn-primary text-sm">
+                      {isSimulating ? 'Running...' : 'Simulate Conflict Txn'}
+                    </button>
+                  </div>
+                  {/* New: Custom Event Input Form */}
+                  <form className="flex flex-col gap-2 bg-slate-800/40 p-3 rounded" onSubmit={submitCustomEvent}>
+                    <div className="flex gap-2">
+                      <input className="input" placeholder="User ID" value={eventInput.user_id} onChange={e => setEventInput({ ...eventInput, user_id: e.target.value })} required />
+                      <input className="input" placeholder="Amount" type="number" value={eventInput.amount} onChange={e => setEventInput({ ...eventInput, amount: e.target.value })} required />
+                    </div>
+                    <input className="input" placeholder="Description" value={eventInput.description} onChange={e => setEventInput({ ...eventInput, description: e.target.value })} required />
+                    <select className="input" value={eventInput.event_type} onChange={e => setEventInput({ ...eventInput, event_type: e.target.value })}>
+                      <option value="financial_txn">Financial Transaction</option>
+                      <option value="security_alert">Security Alert</option>
+                      <option value="policy_upload">Policy Upload</option>
+                    </select>
+                    <button type="submit" className="btn-primary text-sm">Submit Custom Event</button>
+                  </form>
+                  {/* New: Fetch Latest Report Button */}
+                  <button onClick={fetchLatestReport} className="btn-primary text-sm">Get Latest Governance Report</button>
                 </div>
-                
-                {simulationResult ? (
+                {/* Show simulation or custom event result */}
+                {simulationResult && (
                   <div className="mt-4 p-4 bg-slate-900/50 rounded-xl border border-slate-700 space-y-3">
                     <div className="flex items-center gap-3">
-                       {simulationResult.path_taken === 'safe' ? <CheckCircle className="text-green-400" /> : <XCircle className="text-rose-500" />}
-                       <div>
-                         <p className="font-semibold text-white">Final Action: {simulationResult.action_taken}</p>
-                         <p className="text-xs text-textSecondary">TVI Risk: {simulationResult.tvi_score} ({simulationResult.risk_level})</p>
-                       </div>
+                      {simulationResult.path_taken === 'safe' ? <CheckCircle className="text-green-400" /> : <XCircle className="text-rose-500" />}
+                      <div>
+                        <p className="font-semibold text-white">Final Action: {simulationResult.action_taken}</p>
+                        <p className="text-xs text-textSecondary">TVI Risk: {simulationResult.tvi_score} ({simulationResult.risk_level})</p>
+                      </div>
                     </div>
                     <div className="mt-4">
                       <p className="text-xs uppercase text-slate-400 font-bold mb-2">Audit Trace Reasoning:</p>
                       <ul className="text-sm space-y-1 text-slate-300">
-                         {simulationResult.audit_trace.map((trace, idx) => (
-                           <li key={idx} className="flex gap-2"><span className="text-primary opacity-50">-</span> {trace}</li>
-                         ))}
+                        {simulationResult.audit_trace.map((trace, idx) => (
+                          <li key={idx} className="flex gap-2"><span className="text-primary opacity-50">-</span> {trace}</li>
+                        ))}
                       </ul>
                     </div>
                   </div>
-                ) : (
-                  <div className="text-center mt-16 text-textSecondary">
-                    <Activity size={48} className="mx-auto mb-4 opacity-20" />
-                    <p>Click simulate to trigger the multi-agent LangGraph workflow<br/>and witness the trace here.</p>
+                )}
+                {customResult && (
+                  <div className="mt-4 p-4 bg-slate-900/50 rounded-xl border border-slate-700 space-y-3">
+                    <div className="flex items-center gap-3">
+                      {customResult.path_taken === 'safe' ? <CheckCircle className="text-green-400" /> : <XCircle className="text-rose-500" />}
+                      <div>
+                        <p className="font-semibold text-white">Final Action: {customResult.action_taken}</p>
+                        <p className="text-xs text-textSecondary">TVI Risk: {customResult.tvi_score} ({customResult.risk_level})</p>
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      <p className="text-xs uppercase text-slate-400 font-bold mb-2">Audit Trace Reasoning:</p>
+                      <ul className="text-sm space-y-1 text-slate-300">
+                        {customResult.audit_trace && customResult.audit_trace.map((trace, idx) => (
+                          <li key={idx} className="flex gap-2"><span className="text-primary opacity-50">-</span> {trace}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+                {latestReport && (
+                  <div className="mt-4 p-4 bg-slate-900/50 rounded-xl border border-slate-700 space-y-3">
+                    <h4 className="font-semibold text-white mb-2">Latest Governance Report</h4>
+                    {latestReport.error ? (
+                      <p className="text-rose-400">{latestReport.error}</p>
+                    ) : (
+                      <>
+                        <p className="text-slate-300 text-sm">Event ID: {latestReport.event_id}</p>
+                        <p className="text-slate-300 text-sm">Summary: {latestReport.summary || latestReport.governance_summary}</p>
+                        <p className="text-slate-300 text-sm">Final Action: {latestReport.final_action}</p>
+                        <div className="mt-2">
+                          <p className="text-xs uppercase text-slate-400 font-bold mb-2">Audit Trace:</p>
+                          <ul className="text-sm space-y-1 text-slate-300">
+                            {latestReport.audit_trace && latestReport.audit_trace.map((trace, idx) => (
+                              <li key={idx} className="flex gap-2"><span className="text-primary opacity-50">-</span> {trace}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

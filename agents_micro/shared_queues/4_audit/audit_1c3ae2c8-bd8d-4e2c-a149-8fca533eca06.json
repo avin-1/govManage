@@ -1,0 +1,13 @@
+{
+    "path_taken": "Block Path",
+    "action_taken": "Auto Blocked",
+    "reasoning": "Compliance evaluation indicates Authorized=False due to missing user role information, which overrides the low risk and no policy conflict, requiring an automatic block.",
+    "event_id": "1c3ae2c8-bd8d-4e2c-a149-8fca533eca06",
+    "tvi_score": 0.168,
+    "risk_level": "Low",
+    "audit_trace": [
+        "Policy Output: Conflict=False",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation indicates Authorized=False due to missing user role information, which overrides the low risk and no policy conflict, requiring an automatic block."
+    ]
+}

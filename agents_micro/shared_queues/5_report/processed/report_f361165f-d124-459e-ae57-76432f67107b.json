@@ -1,0 +1,11 @@
+{
+    "event_id": "f361165f-d124-459e-ae57-76432f67107b",
+    "risk_level": "Low",
+    "compliance_violation": null,
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation denied authorization (User lacks required role for transfers exceeding $10,000), which overrides other considerations and mandates immediate blocking of the event."
+    ],
+    "final_action": "Auto Blocked"
+}

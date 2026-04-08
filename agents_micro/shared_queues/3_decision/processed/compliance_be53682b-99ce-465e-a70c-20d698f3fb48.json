@@ -1,0 +1,10 @@
+{
+    "event_id": "be53682b-99ce-465e-a70c-20d698f3fb48",
+    "payload": {
+        "user_id": "P003",
+        "amount": 2000,
+        "description": "Health"
+    },
+    "user_authorized": false,
+    "compliance_violation": "User P003 lacks required authorization for transaction amount of 2000."
+}

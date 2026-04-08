@@ -1,0 +1,14 @@
+{
+    "event_id": "96f0535f-2372-438a-856a-34ac845e878d",
+    "payload": {
+        "user_id": "E101",
+        "amount": 50000,
+        "description": "Test Large Transfer"
+    },
+    "policy_analysis_score": 0.92,
+    "matched_policies": [
+        "LargeTransferLimit",
+        "AntiMoneyLaunderingThreshold"
+    ],
+    "policy_conflict": true
+}

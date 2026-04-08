@@ -1,0 +1,10 @@
+{
+    "event_id": "96f0535f-2372-438a-856a-34ac845e878d",
+    "payload": {
+        "user_id": "E101",
+        "amount": 50000,
+        "description": "Test Large Transfer"
+    },
+    "user_authorized": false,
+    "compliance_violation": "Transfer amount exceeds authorized limit for user E101."
+}

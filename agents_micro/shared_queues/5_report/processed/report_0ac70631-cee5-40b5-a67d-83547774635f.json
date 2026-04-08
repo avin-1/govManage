@@ -1,0 +1,11 @@
+{
+    "event_id": "0ac70631-cee5-40b5-a67d-83547774635f",
+    "risk_level": "Low",
+    "compliance_violation": null,
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: The compliance evaluation indicates the user lacks required authorization (Authorized=False), which mandates a Block Path. Additionally, the policy analyst flagged a conflict (Conflict=True). Despite the low risk level, the lack of authorization overrides and results in an automatic block."
+    ],
+    "final_action": "Auto Blocked"
+}

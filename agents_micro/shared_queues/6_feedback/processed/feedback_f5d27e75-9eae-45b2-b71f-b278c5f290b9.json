@@ -1,0 +1,10 @@
+{
+    "event_id": "f5d27e75-9eae-45b2-b71f-b278c5f290b9",
+    "governance_summary": "Event f5d27e75-9eae-45b2-b71f-b278c5f290b9 - Risk: Low, Compliance: OK",
+    "final_action": "Auto Blocked",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation indicates Unauthorized (Amount exceeds authorized limit for user role). According to the rule hierarchy, an Unauthorized flag mandates a Block Path, overriding the conflict and low risk assessments."
+    ]
+}

@@ -1,0 +1,10 @@
+{
+    "event_id": "eff9f96d-9f23-4d34-83de-1cdec5286e41",
+    "governance_summary": "Event eff9f96d-9f23-4d34-83de-1cdec5286e41 - Risk: Low, Compliance: OK",
+    "final_action": "Auto Blocked",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation reports Authorized=False due to insufficient role information, which mandates a Block Path. Additionally, the Policy Analyst indicates a conflict, reinforcing the need to block the event."
+    ]
+}

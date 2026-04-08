@@ -1,0 +1,10 @@
+{
+    "event_id": "734995dd-7035-4dce-b4ad-e4ef00cfae80",
+    "payload": {
+        "user_id": "E101",
+        "amount": 50000,
+        "description": "Test Large Transfer"
+    },
+    "tvi_score": 0.432,
+    "risk_level": "Medium"
+}

@@ -1,0 +1,10 @@
+{
+    "event_id": "869c27b2-abe7-4418-b1fc-d09012179191",
+    "governance_summary": "Event 869c27b2-abe7-4418-b1fc-d09012179191 - Risk: Low, Compliance: OK",
+    "final_action": "Auto Blocked",
+    "audit_trace": [
+        "Policy Output: Conflict=False",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation indicates Authorization = False due to missing or insufficient user role information for salary payment. According to the rule, any Unauthorized result triggers a Block Path, overriding other assessments."
+    ]
+}

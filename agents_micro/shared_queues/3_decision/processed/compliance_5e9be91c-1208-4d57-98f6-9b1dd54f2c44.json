@@ -1,0 +1,10 @@
+{
+    "event_id": "5e9be91c-1208-4d57-98f6-9b1dd54f2c44",
+    "payload": {
+        "user_id": "1",
+        "amount": 1000,
+        "description": "salary payment"
+    },
+    "user_authorized": false,
+    "compliance_violation": "User role information missing; cannot verify authorization."
+}

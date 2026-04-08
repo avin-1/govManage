@@ -3,8 +3,28 @@ from state import GovernanceState
 from database import db, query_policies
 
 def preprocess_event_node(state: GovernanceState) -> GovernanceState:
-    """Preprocesses and normalizes the incoming event. Resolves standard data structure."""
-    state["audit_trace"].append("Preprocessed Event")
+    """Preprocesses and normalizes the incoming event. Cleans input, aggregates policy/action data, computes simple metrics."""
+    # Clean: strip string fields, remove nulls
+    clean_payload = {k: (v.strip() if isinstance(v, str) else v) for k, v in state["payload"].items() if v is not None}
+    state["payload"] = clean_payload
+
+    # Aggregate: count number of fields, check for known keys
+    state["payload_field_count"] = len(clean_payload)
+    state["has_amount"] = "amount" in clean_payload
+    state["has_user_id"] = "user_id" in clean_payload
+
+    # Compute simple metrics: e.g., if amount present, is it numeric and >0
+    amt = clean_payload.get("amount")
+    if amt is not None:
+        try:
+            amt_val = float(amt)
+            state["amount_valid"] = amt_val > 0
+        except Exception:
+            state["amount_valid"] = False
+    else:
+        state["amount_valid"] = False
+
+    state["audit_trace"].append(f"Preprocessed Event: fields={state['payload_field_count']}, has_amount={state['has_amount']}, has_user_id={state['has_user_id']}, amount_valid={state['amount_valid']}")
     return state
 
 def policy_analyst_node(state: GovernanceState) -> GovernanceState:

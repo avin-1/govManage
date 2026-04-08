@@ -1,0 +1,10 @@
+{
+    "event_id": "1c762d73-bcf6-4ffb-bd54-434a9cad0e4c",
+    "payload": {
+        "user_id": "123",
+        "amount": 2000,
+        "description": "abc"
+    },
+    "user_authorized": false,
+    "compliance_violation": "Insufficient role information to determine authorization."
+}

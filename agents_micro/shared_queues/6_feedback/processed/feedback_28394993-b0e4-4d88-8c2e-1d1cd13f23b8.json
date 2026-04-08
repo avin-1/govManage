@@ -1,0 +1,10 @@
+{
+    "event_id": "28394993-b0e4-4d88-8c2e-1d1cd13f23b8",
+    "governance_summary": "Event 28394993-b0e4-4d88-8c2e-1d1cd13f23b8 - Risk: Low, Compliance: OK",
+    "final_action": "Auto Blocked",
+    "audit_trace": [
+        "Policy Output: Conflict=False",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation indicates Authorized=False due to insufficient role information for user_id 1, which triggers an automatic block according to the decision rules."
+    ]
+}

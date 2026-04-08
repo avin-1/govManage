@@ -1,0 +1,13 @@
+{
+    "path_taken": "Block Path",
+    "action_taken": "Auto Blocked",
+    "reasoning": "Compliance evaluation flagged Unauthorized=False due to amount exceeding tier limits, and the policy analyst identified a conflict. According to the decision rules, any Unauthorized result mandates a Block Path, resulting in an automatic block of the event.",
+    "event_id": "8f1a3ca7-529a-4c89-91a6-1d57ac07423d",
+    "tvi_score": 0.12,
+    "risk_level": "Low",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation flagged Unauthorized=False due to amount exceeding tier limits, and the policy analyst identified a conflict. According to the decision rules, any Unauthorized result mandates a Block Path, resulting in an automatic block of the event."
+    ]
+}

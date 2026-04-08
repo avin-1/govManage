@@ -1,0 +1,13 @@
+{
+    "path_taken": "Block Path",
+    "action_taken": "Auto Blocked",
+    "reasoning": "Compliance evaluation indicates Unauthorized=False due to user P003 exceeding the authorized transaction limit for Health expenses. According to the rule hierarchy, an Unauthorized flag mandates a Block Path, overriding other considerations.",
+    "event_id": "37da70a5-eafd-4589-a0f9-b1ed9b7fda2a",
+    "tvi_score": 0.24,
+    "risk_level": "Low",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation indicates Unauthorized=False due to user P003 exceeding the authorized transaction limit for Health expenses. According to the rule hierarchy, an Unauthorized flag mandates a Block Path, overriding other considerations."
+    ]
+}

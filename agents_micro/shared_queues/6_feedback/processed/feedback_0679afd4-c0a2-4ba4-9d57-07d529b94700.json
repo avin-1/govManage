@@ -1,0 +1,10 @@
+{
+    "event_id": "0679afd4-c0a2-4ba4-9d57-07d529b94700",
+    "governance_summary": "Event 0679afd4-c0a2-4ba4-9d57-07d529b94700 - Risk: Medium, Compliance: OK",
+    "final_action": "Auto Blocked",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance check failed (Authorized=False) and policy analysis reported a conflict, triggering the mandatory block condition."
+    ]
+}

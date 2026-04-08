@@ -1,0 +1,9 @@
+{
+    "event_id": "8f1a3ca7-529a-4c89-91a6-1d57ac07423d",
+    "event_type": "financial_txn",
+    "payload": {
+        "user_id": "P003",
+        "amount": 2000,
+        "description": "Health"
+    }
+}

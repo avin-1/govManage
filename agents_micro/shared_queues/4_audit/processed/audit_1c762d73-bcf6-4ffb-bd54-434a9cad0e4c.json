@@ -1,0 +1,13 @@
+{
+    "path_taken": "Block Path",
+    "action_taken": "Auto Blocked",
+    "reasoning": "Compliance evaluation denied authorization (Authorized=False) and the policy analyst flagged a conflict. Both conditions trigger an immediate block, so the event is automatically blocked.",
+    "event_id": "1c762d73-bcf6-4ffb-bd54-434a9cad0e4c",
+    "tvi_score": 0.14,
+    "risk_level": "Low",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation denied authorization (Authorized=False) and the policy analyst flagged a conflict. Both conditions trigger an immediate block, so the event is automatically blocked."
+    ]
+}

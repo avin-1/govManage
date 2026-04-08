@@ -1,0 +1,14 @@
+{
+    "event_id": "be53682b-99ce-465e-a70c-20d698f3fb48",
+    "payload": {
+        "user_id": "P003",
+        "amount": 2000,
+        "description": "Health"
+    },
+    "policy_analysis_score": 0.85,
+    "matched_policies": [
+        "MaxTransactionAmount",
+        "HealthExpenseDocumentation"
+    ],
+    "policy_conflict": true
+}

@@ -1,0 +1,10 @@
+{
+    "event_id": "4f2ca190-f9c5-4b6a-ba39-3d988d91b002",
+    "payload": {
+        "user_id": "P003",
+        "amount": 2000,
+        "description": "Healthcare"
+    },
+    "tvi_score": 0.336,
+    "risk_level": "Medium"
+}

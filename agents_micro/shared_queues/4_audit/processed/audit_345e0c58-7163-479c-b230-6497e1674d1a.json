@@ -1,0 +1,13 @@
+{
+    "path_taken": "Block Path",
+    "action_taken": "Auto Blocked",
+    "reasoning": "Compliance evaluation flagged insufficient authorization (Authorized=False), which overrides other considerations and mandates an automatic block. Additionally, a policy conflict was detected, reinforcing the need to prevent processing.",
+    "event_id": "345e0c58-7163-479c-b230-6497e1674d1a",
+    "tvi_score": 0.21,
+    "risk_level": "Low",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation flagged insufficient authorization (Authorized=False), which overrides other considerations and mandates an automatic block. Additionally, a policy conflict was detected, reinforcing the need to prevent processing."
+    ]
+}

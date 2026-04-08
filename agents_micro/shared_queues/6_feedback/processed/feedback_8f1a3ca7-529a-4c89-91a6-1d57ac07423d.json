@@ -1,0 +1,10 @@
+{
+    "event_id": "8f1a3ca7-529a-4c89-91a6-1d57ac07423d",
+    "governance_summary": "Event 8f1a3ca7-529a-4c89-91a6-1d57ac07423d - Risk: Low, Compliance: OK",
+    "final_action": "Auto Blocked",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation flagged Unauthorized=False due to amount exceeding tier limits, and the policy analyst identified a conflict. According to the decision rules, any Unauthorized result mandates a Block Path, resulting in an automatic block of the event."
+    ]
+}

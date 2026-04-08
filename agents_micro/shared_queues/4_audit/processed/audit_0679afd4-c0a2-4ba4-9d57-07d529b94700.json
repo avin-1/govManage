@@ -1,0 +1,13 @@
+{
+    "path_taken": "Block Path",
+    "action_taken": "Auto Blocked",
+    "reasoning": "Compliance check failed (Authorized=False) and policy analysis reported a conflict, triggering the mandatory block condition.",
+    "event_id": "0679afd4-c0a2-4ba4-9d57-07d529b94700",
+    "tvi_score": 0.336,
+    "risk_level": "Medium",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance check failed (Authorized=False) and policy analysis reported a conflict, triggering the mandatory block condition."
+    ]
+}

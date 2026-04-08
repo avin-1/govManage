@@ -1,0 +1,13 @@
+{
+    "path_taken": "Block Path",
+    "action_taken": "Auto Blocked",
+    "reasoning": "Compliance evaluation reports Authorized=False due to insufficient role information, which mandates a Block Path. Additionally, the Policy Analyst indicates a conflict, reinforcing the need to block the event.",
+    "event_id": "eff9f96d-9f23-4d34-83de-1cdec5286e41",
+    "tvi_score": 0.05,
+    "risk_level": "Low",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation reports Authorized=False due to insufficient role information, which mandates a Block Path. Additionally, the Policy Analyst indicates a conflict, reinforcing the need to block the event."
+    ]
+}

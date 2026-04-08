@@ -1,0 +1,13 @@
+{
+    "path_taken": "Block Path",
+    "action_taken": "Auto Blocked",
+    "reasoning": "Compliance evaluation indicates Unauthorized=False due to missing required role for healthcare transaction, which overrides other considerations and mandates blocking the event.",
+    "event_id": "4f2ca190-f9c5-4b6a-ba39-3d988d91b002",
+    "tvi_score": 0.336,
+    "risk_level": "Medium",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation indicates Unauthorized=False due to missing required role for healthcare transaction, which overrides other considerations and mandates blocking the event."
+    ]
+}

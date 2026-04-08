@@ -1,0 +1,10 @@
+{
+    "event_id": "de790dad-6a30-40b5-accb-f3432bbd5f34",
+    "payload": {
+        "user_id": "P003",
+        "amount": 2000,
+        "description": "Health"
+    },
+    "user_authorized": false,
+    "compliance_violation": "Insufficient role information for user P003 to determine authorization for the requested action."
+}

@@ -1,0 +1,15 @@
+{
+    "event_id": "869c27b2-abe7-4418-b1fc-d09012179191",
+    "payload": {
+        "user_id": "001",
+        "amount": 500,
+        "description": "salary payment"
+    },
+    "policy_analysis_score": 0.0,
+    "matched_policies": [
+        "AmountLimitPolicy",
+        "DescriptionPolicy",
+        "UserIdFormatPolicy"
+    ],
+    "policy_conflict": false
+}

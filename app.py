@@ -50,40 +50,49 @@ def get_transactions():
 def get_reports():
     return jsonify(db.reports)
 
+
 @app.route("/api/trigger", methods=["POST"])
 def trigger_event():
-    data = request.json
+    # Input validation and normalization
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return jsonify({"error": "Malformed JSON"}), 400
+
+    # Required fields: event_type (str), payload (dict)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Request body must be a JSON object"}), 400
+    event_type = data.get("event_type")
+    payload = data.get("payload")
+    if not isinstance(event_type, str) or not isinstance(payload, dict):
+        return jsonify({"error": "event_type (str) and payload (dict) required"}), 400
+
+    # Clean/normalize payload (strip strings, remove nulls)
+    clean_payload = {k: (v.strip() if isinstance(v, str) else v) for k, v in payload.items() if v is not None}
+
     evt_id = str(uuid.uuid4())
-    
-    # Send to file-based message queue
     os.makedirs(INBOX_DIR, exist_ok=True)
     job_file = os.path.join(INBOX_DIR, f"event_{evt_id}.json")
-    
-    payload = {
+    event_obj = {
         "event_id": evt_id,
-        "event_type": data.get("event_type", "Manual Trigger"),
-        "payload": data.get("payload", {})
+        "event_type": event_type,
+        "payload": clean_payload
     }
     with open(job_file, 'w') as f:
-         json.dump(payload, f)
-         
+        json.dump(event_obj, f)
+
     # Wait for the agents to resolve it by checking 4_audit
     audit_file = os.path.join(AUDIT_DIR, f"audit_{evt_id}.json")
     timeout = 30 # seconds
     start_time = time.time()
-    
     print(f"Tracking Audit for {evt_id}...")
     while time.time() - start_time < timeout:
         if os.path.exists(audit_file):
-            # Parse the final output from the distributed engine processing
             try:
                 time.sleep(0.5) # ensure disk write completed
                 with open(audit_file, 'r') as af:
                     result = json.load(af)
-                    
-                # Store in mock db
                 db.audit_logs.append(result)
-                
                 return jsonify({
                     "event_id": evt_id,
                     "path_taken": result.get("path_taken", "Agent Error"),
@@ -94,8 +103,7 @@ def trigger_event():
                 })
             except Exception as e:
                 break
-        time.sleep(1) # Poll every second
-        
+        time.sleep(1)
     return jsonify({
         "event_id": evt_id,
         "path_taken": "Timeout Path",
@@ -110,4 +118,4 @@ def trigger_event():
     })
 
 if __name__ == "__main__":
-    app.run(port=5000, debug=True)
+    app.run(port=5000, debug=False)

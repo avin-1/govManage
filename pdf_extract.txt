@@ -144,7 +144,7 @@ System Architecture
 --- Page 9 ---
 Frontend & Visualisation Tailwind CSS,React.js,Chart.js,
 Agent Orchestration Langgraph,Langchain
-Foundation Model (LLM) gpt-oss-120b
+Foundation Model (LLM) openai/gpt-oss-120b
 Semantic Model all-MiniLM-L6-v2
 Database Mongodb,Redis,ChromaDB
 Other Libraries, APIsSentence Transformers, Prompt Mgmt,REST APIs, Python-

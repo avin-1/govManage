@@ -1,0 +1,10 @@
+{
+    "event_id": "345e0c58-7163-479c-b230-6497e1674d1a",
+    "payload": {
+        "user_id": "123",
+        "amount": 2000,
+        "description": "abc"
+    },
+    "tvi_score": 0.21,
+    "risk_level": "Low"
+}

@@ -1,0 +1,15 @@
+{
+    "event_id": "46aeb409-1bad-4d7c-8112-cf277ec036f9",
+    "payload": {
+        "user_id": "P001",
+        "amount": 500,
+        "description": "salary payment"
+    },
+    "policy_analysis_score": 0.1,
+    "matched_policies": [
+        "TransactionAmountLimit",
+        "SalaryPaymentAuthorization",
+        "PIIExposure"
+    ],
+    "policy_conflict": false
+}

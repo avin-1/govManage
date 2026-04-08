@@ -1,0 +1,10 @@
+{
+    "event_id": "46aeb409-1bad-4d7c-8112-cf277ec036f9",
+    "payload": {
+        "user_id": "P001",
+        "amount": 500,
+        "description": "salary payment"
+    },
+    "user_authorized": false,
+    "compliance_violation": "Insufficient role information provided"
+}

@@ -1,0 +1,13 @@
+{
+    "path_taken": "Block Path",
+    "action_taken": "Auto Blocked",
+    "reasoning": "Compliance returned Authorized=False due to insufficient role information, which mandates a Block Path. Additionally, the Policy Analyst flagged a conflict, reinforcing the decision to block the transaction automatically.",
+    "event_id": "2a3388c2-dbc3-4cd6-ae90-0628a411925d",
+    "tvi_score": 0.1,
+    "risk_level": "Low",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance returned Authorized=False due to insufficient role information, which mandates a Block Path. Additionally, the Policy Analyst flagged a conflict, reinforcing the decision to block the transaction automatically."
+    ]
+}

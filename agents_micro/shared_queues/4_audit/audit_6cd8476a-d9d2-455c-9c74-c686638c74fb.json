@@ -1,0 +1,13 @@
+{
+    "path_taken": "Block Path",
+    "action_taken": "Auto Blocked",
+    "reasoning": "Compliance evaluation marked the transaction as unauthorized due to amount exceeding the user's tier limit. According to the rule, any Unauthorized flag triggers a Block Path, overriding other considerations.",
+    "event_id": "6cd8476a-d9d2-455c-9c74-c686638c74fb",
+    "tvi_score": 0.15,
+    "risk_level": "Low",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation marked the transaction as unauthorized due to amount exceeding the user's tier limit. According to the rule, any Unauthorized flag triggers a Block Path, overriding other considerations."
+    ]
+}

@@ -1,0 +1,10 @@
+{
+    "event_id": "345e0c58-7163-479c-b230-6497e1674d1a",
+    "payload": {
+        "user_id": "123",
+        "amount": 2000,
+        "description": "abc"
+    },
+    "user_authorized": false,
+    "compliance_violation": "Insufficient authorization for transaction amount"
+}

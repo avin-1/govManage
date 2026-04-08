@@ -30,7 +30,7 @@ class AgentState(TypedDict):
 
 # Initialize LLM
 # User requested "openai/gpt-oss-120b" - using ChatGroq with requested identifier
-model_name = os.getenv("GROQ_MODEL", "gpt-oss-120b")
+model_name = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 llm = ChatGroq(model_name=model_name)
 
 def analyze_policy(state: AgentState):

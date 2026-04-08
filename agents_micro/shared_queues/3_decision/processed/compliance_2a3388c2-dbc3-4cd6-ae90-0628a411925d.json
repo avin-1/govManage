@@ -1,0 +1,10 @@
+{
+    "event_id": "2a3388c2-dbc3-4cd6-ae90-0628a411925d",
+    "payload": {
+        "user_id": "P003",
+        "amount": 2000,
+        "description": "Health"
+    },
+    "user_authorized": false,
+    "compliance_violation": "Insufficient role information to authorize transaction."
+}

@@ -1,0 +1,13 @@
+{
+    "path_taken": "Block Path",
+    "action_taken": "Auto Blocked",
+    "reasoning": "Compliance evaluation indicates Unauthorized=False because User E101 lacks the required authorization tier for a $50,000 transfer. This overrides other considerations, leading to an automatic block despite the conflict flag and medium risk level.",
+    "event_id": "b6296e61-2a86-4837-b6d5-34613c3d82f1",
+    "tvi_score": 0.432,
+    "risk_level": "Medium",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation indicates Unauthorized=False because User E101 lacks the required authorization tier for a $50,000 transfer. This overrides other considerations, leading to an automatic block despite the conflict flag and medium risk level."
+    ]
+}

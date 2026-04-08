@@ -1,0 +1,10 @@
+{
+    "event_id": "1e4ca732-7b8d-439a-8806-d8571bb629b0",
+    "governance_summary": "Event 1e4ca732-7b8d-439a-8806-d8571bb629b0 - Risk: Medium, Compliance: OK",
+    "final_action": "Auto Blocked",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance check flagged Unauthorized (Transfer amount exceeds authorized limit for user E101). According to the rule, any Authorized=False result mandates a Block Path. Additionally, the Policy Analyst reported a conflict and the risk assessment indicated a medium risk, reinforcing the decision to block the event."
+    ]
+}

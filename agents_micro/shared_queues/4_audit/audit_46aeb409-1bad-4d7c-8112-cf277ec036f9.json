@@ -1,0 +1,13 @@
+{
+    "path_taken": "Block Path",
+    "action_taken": "Auto Blocked",
+    "reasoning": "Compliance evaluation returned Authorized=False due to insufficient role information. According to the decision rules, any Unauthorized result mandates a Block Path regardless of conflict status or risk level.",
+    "event_id": "46aeb409-1bad-4d7c-8112-cf277ec036f9",
+    "tvi_score": 0.03,
+    "risk_level": "Low",
+    "audit_trace": [
+        "Policy Output: Conflict=False",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation returned Authorized=False due to insufficient role information. According to the decision rules, any Unauthorized result mandates a Block Path regardless of conflict status or risk level."
+    ]
+}

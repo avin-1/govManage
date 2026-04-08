@@ -1,0 +1,10 @@
+{
+    "event_id": "b6296e61-2a86-4837-b6d5-34613c3d82f1",
+    "governance_summary": "Event b6296e61-2a86-4837-b6d5-34613c3d82f1 - Risk: Medium, Compliance: OK",
+    "final_action": "Auto Blocked",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation indicates Unauthorized=False because User E101 lacks the required authorization tier for a $50,000 transfer. This overrides other considerations, leading to an automatic block despite the conflict flag and medium risk level."
+    ]
+}

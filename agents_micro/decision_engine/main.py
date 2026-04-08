@@ -21,7 +21,8 @@ PROCESSED_DIR = os.path.join(INBOX_DIR, "processed")
 os.makedirs(PROCESSED_DIR, exist_ok=True)
 load_dotenv(os.path.join(BASE_DIR, "..", ".env"))
 
-model_name = os.getenv("GROQ_MODEL", "gpt-oss-120b")
+model_name = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+
 llm = ChatGroq(model_name=model_name)
 
 def synthesize_decision(event_id, policy_res, compliance_res, risk_res):

@@ -1,0 +1,1 @@
+{"event_id": "b6296e61-2a86-4837-b6d5-34613c3d82f1", "event_type": "financial_txn", "payload": {"user_id": "E101", "amount": 50000, "description": "Test Large Transfer"}}

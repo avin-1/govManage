@@ -1,0 +1,11 @@
+{
+    "event_id": "96f0535f-2372-438a-856a-34ac845e878d",
+    "risk_level": "Low",
+    "compliance_violation": null,
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation marked the transaction as unauthorized due to exceeding the user's transfer limit, triggering an immediate block. Although the policy analyst flagged a conflict, the explicit unauthorized status overrides and mandates a Block Path."
+    ],
+    "final_action": "Auto Blocked"
+}

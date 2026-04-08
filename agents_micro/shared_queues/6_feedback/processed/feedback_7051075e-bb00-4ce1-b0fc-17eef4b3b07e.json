@@ -1,0 +1,10 @@
+{
+    "event_id": "7051075e-bb00-4ce1-b0fc-17eef4b3b07e",
+    "governance_summary": "Event 7051075e-bb00-4ce1-b0fc-17eef4b3b07e - Risk: Medium, Compliance: OK",
+    "final_action": "Auto Blocked",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation returned Authorized=False due to amount exceeding the user's tier limit, which mandates a Block Path. Additionally, the Policy Analyst flagged a conflict, reinforcing the decision to block the event."
+    ]
+}

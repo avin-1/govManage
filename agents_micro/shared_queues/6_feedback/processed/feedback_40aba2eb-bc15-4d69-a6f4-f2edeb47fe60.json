@@ -1,0 +1,10 @@
+{
+    "event_id": "40aba2eb-bc15-4d69-a6f4-f2edeb47fe60",
+    "governance_summary": "Event 40aba2eb-bc15-4d69-a6f4-f2edeb47fe60 - Risk: Low, Compliance: OK",
+    "final_action": "Auto Blocked",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation indicates the user lacks sufficient role information for authorization (Authorized=False), which mandates a Block Path. Additionally, the policy analyst flagged a conflict (Conflict=True), reinforcing the need to block. Despite the low risk assessment, the lack of authorization overrides risk level."
+    ]
+}

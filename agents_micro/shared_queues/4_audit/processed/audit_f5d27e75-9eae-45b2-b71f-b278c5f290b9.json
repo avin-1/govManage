@@ -1,0 +1,13 @@
+{
+    "path_taken": "Block Path",
+    "action_taken": "Auto Blocked",
+    "reasoning": "Compliance evaluation indicates Unauthorized (Amount exceeds authorized limit for user role). According to the rule hierarchy, an Unauthorized flag mandates a Block Path, overriding the conflict and low risk assessments.",
+    "event_id": "f5d27e75-9eae-45b2-b71f-b278c5f290b9",
+    "tvi_score": 0.24,
+    "risk_level": "Low",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation indicates Unauthorized (Amount exceeds authorized limit for user role). According to the rule hierarchy, an Unauthorized flag mandates a Block Path, overriding the conflict and low risk assessments."
+    ]
+}

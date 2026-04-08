@@ -1,0 +1,277 @@
+[
+    {
+        "event_id": "734995dd-7035-4dce-b4ad-e4ef00cfae80",
+        "summary": "Event 734995dd-7035-4dce-b4ad-e4ef00cfae80 - Risk: Medium, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-05 18:50:09",
+        "audit_trace": [
+            "Policy Output: Conflict=True",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance check failed (Authorized=False) because the transfer amount exceeds the authorized limit for user E101, and the policy analyst flagged a conflict. According to the decision rules, an unauthorized status mandates a Block Path, resulting in an automatic block."
+        ]
+    },
+    {
+        "event_id": "4f2ca190-f9c5-4b6a-ba39-3d988d91b002",
+        "summary": "Event 4f2ca190-f9c5-4b6a-ba39-3d988d91b002 - Risk: Medium, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-05 18:51:23",
+        "audit_trace": [
+            "Policy Output: Conflict=True",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation indicates Unauthorized=False due to missing required role for healthcare transaction, which overrides other considerations and mandates blocking the event."
+        ]
+    },
+    {
+        "event_id": "0679afd4-c0a2-4ba4-9d57-07d529b94700",
+        "summary": "Event 0679afd4-c0a2-4ba4-9d57-07d529b94700 - Risk: Medium, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-05 18:51:26",
+        "audit_trace": [
+            "Policy Output: Conflict=True",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance check failed (Authorized=False) and policy analysis reported a conflict, triggering the mandatory block condition."
+        ]
+    },
+    {
+        "event_id": "7051075e-bb00-4ce1-b0fc-17eef4b3b07e",
+        "summary": "Event 7051075e-bb00-4ce1-b0fc-17eef4b3b07e - Risk: Medium, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-05 18:59:24",
+        "audit_trace": [
+            "Policy Output: Conflict=True",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation returned Authorized=False due to amount exceeding the user's tier limit, which mandates a Block Path. Additionally, the Policy Analyst flagged a conflict, reinforcing the decision to block the event."
+        ]
+    },
+    {
+        "event_id": "2a3388c2-dbc3-4cd6-ae90-0628a411925d",
+        "summary": "Event 2a3388c2-dbc3-4cd6-ae90-0628a411925d - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-07 22:19:17",
+        "audit_trace": [
+            "Policy Output: Conflict=True",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance returned Authorized=False due to insufficient role information, which mandates a Block Path. Additionally, the Policy Analyst flagged a conflict, reinforcing the decision to block the transaction automatically."
+        ]
+    },
+    {
+        "event_id": "37da70a5-eafd-4589-a0f9-b1ed9b7fda2a",
+        "summary": "Event 37da70a5-eafd-4589-a0f9-b1ed9b7fda2a - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-07 22:19:18",
+        "audit_trace": [
+            "Policy Output: Conflict=True",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation indicates Unauthorized=False due to user P003 exceeding the authorized transaction limit for Health expenses. According to the rule hierarchy, an Unauthorized flag mandates a Block Path, overriding other considerations."
+        ]
+    },
+    {
+        "event_id": "0ac70631-cee5-40b5-a67d-83547774635f",
+        "summary": "Event 0ac70631-cee5-40b5-a67d-83547774635f - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-07 22:20:08",
+        "audit_trace": [
+            "Policy Output: Conflict=True",
+            "Compliance Output: Auth=False",
+            "Decision Engine: The compliance evaluation indicates the user lacks required authorization (Authorized=False), which mandates a Block Path. Additionally, the policy analyst flagged a conflict (Conflict=True). Despite the low risk level, the lack of authorization overrides and results in an automatic block."
+        ]
+    },
+    {
+        "event_id": "8f1a3ca7-529a-4c89-91a6-1d57ac07423d",
+        "summary": "Event 8f1a3ca7-529a-4c89-91a6-1d57ac07423d - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-07 22:20:13",
+        "audit_trace": [
+            "Policy Output: Conflict=True",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation flagged Unauthorized=False due to amount exceeding tier limits, and the policy analyst identified a conflict. According to the decision rules, any Unauthorized result mandates a Block Path, resulting in an automatic block of the event."
+        ]
+    },
+    {
+        "event_id": "f5d27e75-9eae-45b2-b71f-b278c5f290b9",
+        "summary": "Event f5d27e75-9eae-45b2-b71f-b278c5f290b9 - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-07 22:20:25",
+        "audit_trace": [
+            "Policy Output: Conflict=True",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation indicates Unauthorized (Amount exceeds authorized limit for user role). According to the rule hierarchy, an Unauthorized flag mandates a Block Path, overriding the conflict and low risk assessments."
+        ]
+    },
+    {
+        "event_id": "be53682b-99ce-465e-a70c-20d698f3fb48",
+        "summary": "Event be53682b-99ce-465e-a70c-20d698f3fb48 - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-07 22:31:39",
+        "audit_trace": [
+            "Policy Output: Conflict=True",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation indicates the user lacks required authorization for the $2000 transaction (Authorized=False). According to the policy, any Unauthorized result mandates a Block Path, which overrides the Review Path triggered by the conflict flag. Therefore, the event is automatically blocked."
+        ]
+    },
+    {
+        "event_id": "40aba2eb-bc15-4d69-a6f4-f2edeb47fe60",
+        "summary": "Event 40aba2eb-bc15-4d69-a6f4-f2edeb47fe60 - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-07 22:31:41",
+        "audit_trace": [
+            "Policy Output: Conflict=True",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation indicates the user lacks sufficient role information for authorization (Authorized=False), which mandates a Block Path. Additionally, the policy analyst flagged a conflict (Conflict=True), reinforcing the need to block. Despite the low risk assessment, the lack of authorization overrides risk level."
+        ]
+    },
+    {
+        "event_id": "de790dad-6a30-40b5-accb-f3432bbd5f34",
+        "summary": "Event de790dad-6a30-40b5-accb-f3432bbd5f34 - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-07 22:31:46",
+        "audit_trace": [
+            "Policy Output: Conflict=True",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation indicates Authorized=False due to insufficient role information, which mandates a Block Path. Additionally, the Policy Analyst flagged a conflict, reinforcing the need to block the request."
+        ]
+    },
+    {
+        "event_id": "1e4ca732-7b8d-439a-8806-d8571bb629b0",
+        "summary": "Event 1e4ca732-7b8d-439a-8806-d8571bb629b0 - Risk: Medium, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-07 22:32:08",
+        "audit_trace": [
+            "Policy Output: Conflict=True",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance check flagged Unauthorized (Transfer amount exceeds authorized limit for user E101). According to the rule, any Authorized=False result mandates a Block Path. Additionally, the Policy Analyst reported a conflict and the risk assessment indicated a medium risk, reinforcing the decision to block the event."
+        ]
+    },
+    {
+        "event_id": "eff9f96d-9f23-4d34-83de-1cdec5286e41",
+        "summary": "Event eff9f96d-9f23-4d34-83de-1cdec5286e41 - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-07 22:38:15",
+        "audit_trace": [
+            "Policy Output: Conflict=True",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation reports Authorized=False due to insufficient role information, which mandates a Block Path. Additionally, the Policy Analyst indicates a conflict, reinforcing the need to block the event."
+        ]
+    },
+    {
+        "event_id": "345e0c58-7163-479c-b230-6497e1674d1a",
+        "summary": "Event 345e0c58-7163-479c-b230-6497e1674d1a - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-07 22:38:20",
+        "audit_trace": [
+            "Policy Output: Conflict=True",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation flagged insufficient authorization (Authorized=False), which overrides other considerations and mandates an automatic block. Additionally, a policy conflict was detected, reinforcing the need to prevent processing."
+        ]
+    },
+    {
+        "event_id": "1c762d73-bcf6-4ffb-bd54-434a9cad0e4c",
+        "summary": "Event 1c762d73-bcf6-4ffb-bd54-434a9cad0e4c - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-07 22:38:21",
+        "audit_trace": [
+            "Policy Output: Conflict=True",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation denied authorization (Authorized=False) and the policy analyst flagged a conflict. Both conditions trigger an immediate block, so the event is automatically blocked."
+        ]
+    },
+    {
+        "event_id": "f361165f-d124-459e-ae57-76432f67107b",
+        "summary": "Event f361165f-d124-459e-ae57-76432f67107b - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-07 22:38:23",
+        "audit_trace": [
+            "Policy Output: Conflict=True",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation denied authorization (User lacks required role for transfers exceeding $10,000), which overrides other considerations and mandates immediate blocking of the event."
+        ]
+    },
+    {
+        "event_id": "6cd8476a-d9d2-455c-9c74-c686638c74fb",
+        "summary": "Event 6cd8476a-d9d2-455c-9c74-c686638c74fb - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-08 01:50:44",
+        "audit_trace": [
+            "Policy Output: Conflict=True",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation marked the transaction as unauthorized due to amount exceeding the user's tier limit. According to the rule, any Unauthorized flag triggers a Block Path, overriding other considerations."
+        ]
+    },
+    {
+        "event_id": "b6296e61-2a86-4837-b6d5-34613c3d82f1",
+        "summary": "Event b6296e61-2a86-4837-b6d5-34613c3d82f1 - Risk: Medium, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-08 01:51:15",
+        "audit_trace": [
+            "Policy Output: Conflict=True",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation indicates Unauthorized=False because User E101 lacks the required authorization tier for a $50,000 transfer. This overrides other considerations, leading to an automatic block despite the conflict flag and medium risk level."
+        ]
+    },
+    {
+        "event_id": "28394993-b0e4-4d88-8c2e-1d1cd13f23b8",
+        "summary": "Event 28394993-b0e4-4d88-8c2e-1d1cd13f23b8 - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-08 01:53:41",
+        "audit_trace": [
+            "Policy Output: Conflict=False",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation indicates Authorized=False due to insufficient role information for user_id 1, which triggers an automatic block according to the decision rules."
+        ]
+    },
+    {
+        "event_id": "5e9be91c-1208-4d57-98f6-9b1dd54f2c44",
+        "summary": "Event 5e9be91c-1208-4d57-98f6-9b1dd54f2c44 - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-08 01:53:53",
+        "audit_trace": [
+            "Policy Output: Conflict=False",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation failed authorization (Authorized=False) due to missing user role information, triggering mandatory blocking regardless of conflict or risk level."
+        ]
+    },
+    {
+        "event_id": "96f0535f-2372-438a-856a-34ac845e878d",
+        "summary": "Event 96f0535f-2372-438a-856a-34ac845e878d - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-08 01:54:14",
+        "audit_trace": [
+            "Policy Output: Conflict=True",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation marked the transaction as unauthorized due to exceeding the user's transfer limit, triggering an immediate block. Although the policy analyst flagged a conflict, the explicit unauthorized status overrides and mandates a Block Path."
+        ]
+    },
+    {
+        "event_id": "1c3ae2c8-bd8d-4e2c-a149-8fca533eca06",
+        "summary": "Event 1c3ae2c8-bd8d-4e2c-a149-8fca533eca06 - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-08 01:54:45",
+        "audit_trace": [
+            "Policy Output: Conflict=False",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation indicates Authorized=False due to missing user role information, which overrides the low risk and no policy conflict, requiring an automatic block."
+        ]
+    },
+    {
+        "event_id": "869c27b2-abe7-4418-b1fc-d09012179191",
+        "summary": "Event 869c27b2-abe7-4418-b1fc-d09012179191 - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-08 01:54:58",
+        "audit_trace": [
+            "Policy Output: Conflict=False",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation indicates Authorization = False due to missing or insufficient user role information for salary payment. According to the rule, any Unauthorized result triggers a Block Path, overriding other assessments."
+        ]
+    },
+    {
+        "event_id": "46aeb409-1bad-4d7c-8112-cf277ec036f9",
+        "summary": "Event 46aeb409-1bad-4d7c-8112-cf277ec036f9 - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-08 01:55:14",
+        "audit_trace": [
+            "Policy Output: Conflict=False",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation returned Authorized=False due to insufficient role information. According to the decision rules, any Unauthorized result mandates a Block Path regardless of conflict status or risk level."
+        ]
+    }
+]

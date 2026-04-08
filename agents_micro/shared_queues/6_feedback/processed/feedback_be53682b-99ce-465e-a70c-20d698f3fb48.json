@@ -1,0 +1,10 @@
+{
+    "event_id": "be53682b-99ce-465e-a70c-20d698f3fb48",
+    "governance_summary": "Event be53682b-99ce-465e-a70c-20d698f3fb48 - Risk: Low, Compliance: OK",
+    "final_action": "Auto Blocked",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation indicates the user lacks required authorization for the $2000 transaction (Authorized=False). According to the policy, any Unauthorized result mandates a Block Path, which overrides the Review Path triggered by the conflict flag. Therefore, the event is automatically blocked."
+    ]
+}

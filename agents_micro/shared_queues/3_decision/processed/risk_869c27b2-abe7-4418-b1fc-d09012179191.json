@@ -1,0 +1,10 @@
+{
+    "event_id": "869c27b2-abe7-4418-b1fc-d09012179191",
+    "payload": {
+        "user_id": "001",
+        "amount": 500,
+        "description": "salary payment"
+    },
+    "tvi_score": 0.024,
+    "risk_level": "Low"
+}

@@ -1,0 +1,10 @@
+{
+    "event_id": "345e0c58-7163-479c-b230-6497e1674d1a",
+    "governance_summary": "Event 345e0c58-7163-479c-b230-6497e1674d1a - Risk: Low, Compliance: OK",
+    "final_action": "Auto Blocked",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation flagged insufficient authorization (Authorized=False), which overrides other considerations and mandates an automatic block. Additionally, a policy conflict was detected, reinforcing the need to prevent processing."
+    ]
+}

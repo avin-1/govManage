@@ -1,0 +1,10 @@
+{
+    "event_id": "5e9be91c-1208-4d57-98f6-9b1dd54f2c44",
+    "governance_summary": "Event 5e9be91c-1208-4d57-98f6-9b1dd54f2c44 - Risk: Low, Compliance: OK",
+    "final_action": "Auto Blocked",
+    "audit_trace": [
+        "Policy Output: Conflict=False",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation failed authorization (Authorized=False) due to missing user role information, triggering mandatory blocking regardless of conflict or risk level."
+    ]
+}

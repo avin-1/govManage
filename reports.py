@@ -26,7 +26,7 @@ def generate_macro_report(report_type: str) -> dict:
         llm = ChatGroq(model_name="openai/gpt-oss-120b", temperature=0.1)
         structured_llm = llm.with_structured_output(ReportStructure)
         
-        schema_context = db.get_schema_context()
+        schema_context = db.get_schema_context().replace("{", "{{").replace("}", "}}")
         
         prompt = ChatPromptTemplate.from_messages([
             ("system", "You are an expert enterprise Data Analyst and Governance Expert. "
@@ -42,6 +42,8 @@ def generate_macro_report(report_type: str) -> dict:
             "raw_data": raw_data_summary + "\nTransactions:\n" + json.dumps(txns[:10], default=str)
         })
         
+        if hasattr(result, "model_dump"):
+            return result.model_dump()
         return result.dict()
     except Exception as e:
         return {

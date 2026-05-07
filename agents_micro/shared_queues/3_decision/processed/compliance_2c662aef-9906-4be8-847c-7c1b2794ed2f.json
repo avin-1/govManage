@@ -1,0 +1,10 @@
+{
+    "event_id": "2c662aef-9906-4be8-847c-7c1b2794ed2f",
+    "payload": {
+        "user_id": "E101",
+        "amount": 20000.0,
+        "description": "Salary"
+    },
+    "user_authorized": false,
+    "compliance_violation": "User role 'employee' insufficient for processing a salary payment of 20000. Required role is at least 'manager' with clearance level_2."
+}

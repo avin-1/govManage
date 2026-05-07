@@ -1,0 +1,13 @@
+{
+    "path_taken": "Block Path",
+    "action_taken": "Auto Blocked",
+    "reasoning": "Compliance evaluation flagged the event as unauthorized because the user lacks the required manager role or higher clearance for a transaction amount of 20000.0. According to the rule that any Unauthorized event must be blocked, the system selects the Block Path and automatically blocks the action.",
+    "event_id": "6e1157c1-854e-4ffc-9472-b282dec108a5",
+    "tvi_score": 0.24,
+    "risk_level": "Low",
+    "audit_trace": [
+        "Policy Output: Conflict=False",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation flagged the event as unauthorized because the user lacks the required manager role or higher clearance for a transaction amount of 20000.0. According to the rule that any Unauthorized event must be blocked, the system selects the Block Path and automatically blocks the action."
+    ]
+}

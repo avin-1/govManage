@@ -1,0 +1,15 @@
+{
+    "event_id": "f63a566d-7070-46fb-979c-d57be7aaad37",
+    "payload": {
+        "user_id": "E101",
+        "amount": 300.0,
+        "description": "Payment to an individual for db service"
+    },
+    "policy_analysis_score": 0.1,
+    "matched_policies": [
+        "amount_gt_role_required",
+        "role_block_for_event",
+        "clearance_min_for_event"
+    ],
+    "policy_conflict": false
+}

@@ -1,0 +1,10 @@
+{
+    "event_id": "07c8a1ed-e0fd-4ea0-afc9-c0c8f48182dc",
+    "governance_summary": "Event 07c8a1ed-e0fd-4ea0-afc9-c0c8f48182dc - Risk: Low, Compliance: OK",
+    "final_action": "Auto Blocked",
+    "audit_trace": [
+        "Policy Output: Conflict=False",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance check failed: User E101 lacks the required manager role or higher clearance for a transaction amount of 20000.0. Although the risk assessment is low, the authorization failure mandates an automatic block."
+    ]
+}

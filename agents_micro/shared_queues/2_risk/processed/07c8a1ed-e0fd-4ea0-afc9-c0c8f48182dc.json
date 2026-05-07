@@ -1,0 +1,9 @@
+{
+    "event_id": "07c8a1ed-e0fd-4ea0-afc9-c0c8f48182dc",
+    "event_type": "security_alert",
+    "payload": {
+        "user_id": "E101",
+        "amount": 20000.0,
+        "description": "Salary"
+    }
+}

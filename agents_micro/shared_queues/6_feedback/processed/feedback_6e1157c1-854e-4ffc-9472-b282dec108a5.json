@@ -1,0 +1,10 @@
+{
+    "event_id": "6e1157c1-854e-4ffc-9472-b282dec108a5",
+    "governance_summary": "Event 6e1157c1-854e-4ffc-9472-b282dec108a5 - Risk: Low, Compliance: OK",
+    "final_action": "Auto Blocked",
+    "audit_trace": [
+        "Policy Output: Conflict=False",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation flagged the event as unauthorized because the user lacks the required manager role or higher clearance for a transaction amount of 20000.0. According to the rule that any Unauthorized event must be blocked, the system selects the Block Path and automatically blocks the action."
+    ]
+}

@@ -1,0 +1,10 @@
+{
+    "event_id": "450cd0e1-3d3b-4aad-aa11-cf4edfccd277",
+    "governance_summary": "Event 450cd0e1-3d3b-4aad-aa11-cf4edfccd277 - Risk: Low, Compliance: OK",
+    "final_action": "Auto Blocked",
+    "audit_trace": [
+        "Policy Output: Conflict=False",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance check failed: user lacks required manager or higher role for amount 200.0, resulting in Authorized=False. No policy conflict and low risk do not override the authorization failure, so the event is automatically blocked."
+    ]
+}

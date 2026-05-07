@@ -1,0 +1,11 @@
+{
+    "event_id": "2c662aef-9906-4be8-847c-7c1b2794ed2f",
+    "risk_level": "Medium",
+    "compliance_violation": null,
+    "audit_trace": [
+        "Policy Output: Conflict=False",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation flagged the event as unauthorized because the user role 'employee' lacks the required 'manager' role and clearance level_2 for a salary payment of 20000. Despite no policy conflict and a medium risk rating, the authorization failure mandates an automatic block."
+    ],
+    "final_action": "Auto Blocked"
+}

@@ -1,0 +1,11 @@
+{
+    "event_id": "605521ac-e635-415c-abce-45c907709ee1",
+    "risk_level": "Low",
+    "compliance_violation": null,
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: The compliance evaluation marked the transaction as unauthorized because the amount of 20,000 exceeds the permitted limit for a standard employee role, requiring a manager or higher with appropriate clearance. Although a policy conflict was also detected, the explicit unauthorized status takes precedence, resulting in an automatic block of the event."
+    ],
+    "final_action": "Auto Blocked"
+}

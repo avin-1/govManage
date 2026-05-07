@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, CheckCircle, Database, FileText, ShieldCheck, Sparkles, XCircle, AlertTriangle, FileBarChart, PieChart, Info, ChevronRight } from 'lucide-react';
+import { Activity, CheckCircle, Database, FileText, ShieldCheck, Sparkles, XCircle, AlertTriangle, FileBarChart, PieChart, Info, ChevronRight, Upload, Trash2, FileCheck } from 'lucide-react';
 import { Chart as ChartJS, CategoryScale, Filler, Legend, LineElement, LinearScale, PointElement, Title, Tooltip } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 
@@ -80,6 +80,30 @@ type EventInput = {
   mode: TriggerMode;
 };
 
+type PolicyDocument = {
+  document_id: string;
+  name: string;
+  description?: string;
+  file_name: string;
+  file_type: string;
+  sector: string;
+  risk: string;
+  framework?: string;
+  tags?: string[];
+  chunk_count: number;
+  upload_date: string;
+  is_active: boolean;
+  chroma_status?: string;
+};
+
+type UploadForm = {
+  name: string;
+  sector: string;
+  risk: string;
+  description: string;
+  framework: string;
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [kpis, setKpis] = useState<Kpis>({ active_policies: 0, compliance_pct: 0, citizen_satisfaction: 0, risk_index: 0 });
@@ -101,6 +125,15 @@ export default function App() {
   const [customResult, setCustomResult] = useState<DecisionResult | null>(null);
   const [latestReport, setLatestReport] = useState<ReportResult | null>(null);
 
+  // Policy document upload state
+  const [policyDocs, setPolicyDocs] = useState<PolicyDocument[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<{ success?: string; error?: string } | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadForm, setUploadForm] = useState<UploadForm>({
+    name: '', sector: 'Finance', risk: 'Medium', description: '', framework: 'custom',
+  });
+
   useEffect(() => {
     fetchData();
   }, [activeTab]);
@@ -110,11 +143,13 @@ export default function App() {
       const p1 = fetch(`${API_URL}/kpis`).then(r => r.json());
       const p2 = fetch(`${API_URL}/masters`).then(r => r.json());
       const p3 = fetch(`${API_URL}/transactions?ts=${Date.now()}`, { cache: 'no-store' }).then(r => r.json());
-      
-      const [dataKpi, dataMasters, dataTrans] = await Promise.all([p1, p2, p3]);
+      const p4 = fetch(`${API_URL}/policies/documents`).then(r => r.json());
+
+      const [dataKpi, dataMasters, dataTrans, dataDocs] = await Promise.all([p1, p2, p3, p4]);
       setKpis(dataKpi);
       setMasters(dataMasters);
       setTransactions(dataTrans);
+      if (Array.isArray(dataDocs)) setPolicyDocs(dataDocs);
     } catch (err) {
       console.warn("Backend not running yet or unreachable");
     }
@@ -186,6 +221,58 @@ export default function App() {
       setMacroReport({ error: 'Failed to generate report from LLM. Check backend connection.' });
     } finally {
       setIsGeneratingMacro(null);
+    }
+  };
+
+  const fetchPolicyDocs = async () => {
+    try {
+      const res = await fetch(`${API_URL}/policies/documents`);
+      const data = await res.json();
+      if (Array.isArray(data)) setPolicyDocs(data);
+    } catch {
+      // backend may not be running yet
+    }
+  };
+
+  const handlePolicyUpload = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!selectedFile) return;
+    setIsUploading(true);
+    setUploadResult(null);
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    formData.append('name', uploadForm.name || selectedFile.name);
+    formData.append('sector', uploadForm.sector);
+    formData.append('risk', uploadForm.risk);
+    formData.append('description', uploadForm.description);
+    formData.append('framework', uploadForm.framework);
+
+    try {
+      const res = await fetch(`${API_URL}/policies/upload`, { method: 'POST', body: formData });
+      const data = await res.json();
+      if (res.ok) {
+        setUploadResult({ success: `"${data.name}" indexed — ${data.chunk_count} chunks stored (${data.chroma_status}).` });
+        setSelectedFile(null);
+        setUploadForm({ name: '', sector: 'Finance', risk: 'Medium', description: '', framework: 'custom' });
+        await fetchPolicyDocs();
+        await fetchData();
+      } else {
+        setUploadResult({ error: data.error || 'Upload failed' });
+      }
+    } catch {
+      setUploadResult({ error: 'Upload failed — check backend connection' });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const deletePolicyDoc = async (documentId: string) => {
+    try {
+      await fetch(`${API_URL}/policies/documents/${documentId}`, { method: 'DELETE' });
+      await fetchPolicyDocs();
+    } catch {
+      // ignore
     }
   };
 
@@ -572,33 +659,199 @@ export default function App() {
 
           {/* --- CONFIG / MASTERS VIEW --- */}
           {activeTab === 'masters' && (
-            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-6">
-              <h2 className="text-3xl font-bold text-slate-800 tracking-tight mb-6">Configuration & Repository</h2>
-              <div className="enterprise-panel p-0 overflow-hidden shadow-md">
-                <table className="w-full text-left border-collapse">
-                  <thead className="bg-slate-50 border-b border-panelBorder">
-                    <tr>
-                      <th className="p-4 text-[11px] uppercase tracking-widest font-bold text-slate-500">Ref ID</th>
-                      <th className="p-4 text-[11px] uppercase tracking-widest font-bold text-slate-500">Master Definition</th>
-                      <th className="p-4 text-[11px] uppercase tracking-widest font-bold text-slate-500">Division</th>
-                      <th className="p-4 text-[11px] uppercase tracking-widest font-bold text-slate-500 text-center">Threat Level</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-sm">
-                    {masters.map((m, i) => (
-                      <tr key={i} className="border-b last:border-b-0 hover:bg-blue-50/30 transition-colors group">
-                        <td className="p-4 font-mono text-slate-500 font-bold text-xs">{m.id}</td>
-                        <td className="p-4 text-slate-800 font-medium">{m.name}</td>
-                        <td className="p-4"><span className="bg-slate-100 text-slate-600 px-2 py-1 rounded-[4px] text-xs font-semibold">{m.sector}</span></td>
-                        <td className="p-4 text-center">
-                           <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${m.risk === 'High' ? 'bg-rose-50 text-rose-700 border-rose-200 shadow-[0_0_10px_rgba(225,29,72,0.1)]' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
-                             {m.risk}
-                           </span>
-                        </td>
+            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-8">
+              <h2 className="text-3xl font-bold text-slate-800 tracking-tight">Configuration & Repository</h2>
+
+              {/* Upload Policy Document */}
+              <div className="enterprise-panel border-t-4 border-t-indigo-500">
+                <div className="flex items-center gap-3 mb-5 pb-4 border-b border-slate-100">
+                  <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600">
+                    <Upload size={18} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 tracking-tight">Upload Policy Document</h3>
+                    <p className="text-xs text-slate-500">Supported: PDF, DOCX, TXT, MD — text is chunked and indexed into ChromaDB for semantic retrieval.</p>
+                  </div>
+                </div>
+
+                <form onSubmit={handlePolicyUpload} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Document File *</label>
+                      <input
+                        type="file"
+                        accept=".pdf,.docx,.doc,.txt,.md"
+                        required
+                        onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
+                        className="input text-sm file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Policy Name</label>
+                      <input
+                        className="input"
+                        placeholder="e.g. Vendor Access Control Policy"
+                        value={uploadForm.name}
+                        onChange={(e) => setUploadForm({ ...uploadForm, name: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Sector</label>
+                      <select className="input" value={uploadForm.sector} onChange={(e) => setUploadForm({ ...uploadForm, sector: e.target.value })}>
+                        <option>Finance</option>
+                        <option>Technology</option>
+                        <option>Security</option>
+                        <option>HR</option>
+                        <option>Legal</option>
+                        <option>General</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Risk Level</label>
+                      <select className="input" value={uploadForm.risk} onChange={(e) => setUploadForm({ ...uploadForm, risk: e.target.value })}>
+                        <option>Low</option>
+                        <option>Medium</option>
+                        <option>High</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Framework</label>
+                      <select className="input" value={uploadForm.framework} onChange={(e) => setUploadForm({ ...uploadForm, framework: e.target.value })}>
+                        <option value="custom">Custom</option>
+                        <option value="ISO_27001">ISO 27001</option>
+                        <option value="NIST_CSF">NIST CSF</option>
+                        <option value="SOC2">SOC 2</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Description (optional)</label>
+                    <input
+                      className="input"
+                      placeholder="Brief description of what this policy covers"
+                      value={uploadForm.description}
+                      onChange={(e) => setUploadForm({ ...uploadForm, description: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2">
+                    <div className="flex-1">
+                      {uploadResult?.success && (
+                        <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-md">
+                          <FileCheck size={14} /> {uploadResult.success}
+                        </div>
+                      )}
+                      {uploadResult?.error && (
+                        <div className="flex items-center gap-2 text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded-md">
+                          <XCircle size={14} /> {uploadResult.error}
+                        </div>
+                      )}
+                    </div>
+                    <button type="submit" disabled={isUploading || !selectedFile} className="btn-primary ml-4 !bg-indigo-600 hover:!bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                      <span className="flex items-center gap-2">
+                        <Upload size={14} />
+                        {isUploading ? 'Indexing...' : 'Upload & Index'}
+                      </span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Baseline Policies (unchanged) */}
+              <div>
+                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">Baseline Policies</h3>
+                <div className="enterprise-panel p-0 overflow-hidden shadow-md">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-slate-50 border-b border-panelBorder">
+                      <tr>
+                        <th className="p-4 text-[11px] uppercase tracking-widest font-bold text-slate-500">Ref ID</th>
+                        <th className="p-4 text-[11px] uppercase tracking-widest font-bold text-slate-500">Master Definition</th>
+                        <th className="p-4 text-[11px] uppercase tracking-widest font-bold text-slate-500">Division</th>
+                        <th className="p-4 text-[11px] uppercase tracking-widest font-bold text-slate-500 text-center">Threat Level</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="text-sm">
+                      {masters.map((m, i) => (
+                        <tr key={i} className="border-b last:border-b-0 hover:bg-blue-50/30 transition-colors group">
+                          <td className="p-4 font-mono text-slate-500 font-bold text-xs">{m.id}</td>
+                          <td className="p-4 text-slate-800 font-medium">{m.name}</td>
+                          <td className="p-4"><span className="bg-slate-100 text-slate-600 px-2 py-1 rounded-[4px] text-xs font-semibold">{m.sector}</span></td>
+                          <td className="p-4 text-center">
+                            <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${m.risk === 'High' ? 'bg-rose-50 text-rose-700 border-rose-200 shadow-[0_0_10px_rgba(225,29,72,0.1)]' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
+                              {m.risk}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Uploaded Policy Documents */}
+              <div>
+                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">
+                  Uploaded Documents <span className="ml-2 bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-full">{policyDocs.length}</span>
+                </h3>
+                {policyDocs.length === 0 ? (
+                  <div className="enterprise-panel flex flex-col items-center justify-center py-14 bg-slate-50/50 border-dashed border-2 text-center">
+                    <Upload size={32} className="text-slate-300 mb-3" />
+                    <p className="font-semibold text-sm text-slate-500">No policy documents uploaded yet.</p>
+                    <p className="text-xs text-slate-400 mt-1">Use the form above to upload a PDF, DOCX, or TXT policy file.</p>
+                  </div>
+                ) : (
+                  <div className="enterprise-panel p-0 overflow-hidden shadow-md">
+                    <table className="w-full text-left border-collapse">
+                      <thead className="bg-slate-50 border-b border-panelBorder">
+                        <tr>
+                          <th className="p-4 text-[11px] uppercase tracking-widest font-bold text-slate-500">Name</th>
+                          <th className="p-4 text-[11px] uppercase tracking-widest font-bold text-slate-500">File</th>
+                          <th className="p-4 text-[11px] uppercase tracking-widest font-bold text-slate-500">Sector</th>
+                          <th className="p-4 text-[11px] uppercase tracking-widest font-bold text-slate-500">Framework</th>
+                          <th className="p-4 text-[11px] uppercase tracking-widest font-bold text-slate-500 text-center">Risk</th>
+                          <th className="p-4 text-[11px] uppercase tracking-widest font-bold text-slate-500 text-center">Chunks</th>
+                          <th className="p-4 text-[11px] uppercase tracking-widest font-bold text-slate-500">Uploaded</th>
+                          <th className="p-4 text-[11px] uppercase tracking-widest font-bold text-slate-500 text-center">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-sm">
+                        {policyDocs.map((d) => (
+                          <tr key={d.document_id} className="border-b last:border-b-0 hover:bg-indigo-50/20 transition-colors">
+                            <td className="p-4 text-slate-800 font-medium max-w-[200px] truncate">{d.name}</td>
+                            <td className="p-4">
+                              <span className="font-mono text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded uppercase">{d.file_type}</span>
+                              <span className="ml-2 text-xs text-slate-400 truncate max-w-[120px] inline-block align-middle">{d.file_name}</span>
+                            </td>
+                            <td className="p-4"><span className="bg-slate-100 text-slate-600 px-2 py-1 rounded-[4px] text-xs font-semibold">{d.sector}</span></td>
+                            <td className="p-4 text-xs text-slate-500 font-medium">{d.framework || '—'}</td>
+                            <td className="p-4 text-center">
+                              <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${d.risk === 'High' ? 'bg-rose-50 text-rose-700 border-rose-200' : d.risk === 'Medium' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                                {d.risk}
+                              </span>
+                            </td>
+                            <td className="p-4 text-center">
+                              <span className="bg-indigo-50 text-indigo-700 text-xs font-bold px-2 py-1 rounded">{d.chunk_count}</span>
+                            </td>
+                            <td className="p-4 text-xs text-slate-400">{new Date(d.upload_date).toLocaleDateString()}</td>
+                            <td className="p-4 text-center">
+                              <button
+                                onClick={() => deletePolicyDoc(d.document_id)}
+                                className="text-slate-400 hover:text-red-500 transition-colors p-1 rounded hover:bg-red-50"
+                                title="Delete document"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           )}

@@ -1,0 +1,15 @@
+{
+    "event_id": "2c662aef-9906-4be8-847c-7c1b2794ed2f",
+    "payload": {
+        "user_id": "E101",
+        "amount": 20000.0,
+        "description": "Salary"
+    },
+    "policy_analysis_score": 0.0,
+    "matched_policies": [
+        "amount_gt_role_required",
+        "role_block_for_event",
+        "clearance_min_for_event"
+    ],
+    "policy_conflict": false
+}

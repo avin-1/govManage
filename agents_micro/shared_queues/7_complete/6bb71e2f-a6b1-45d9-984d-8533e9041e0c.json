@@ -1,0 +1,10 @@
+{
+    "event_id": "6bb71e2f-a6b1-45d9-984d-8533e9041e0c",
+    "governance_summary": "Event 6bb71e2f-a6b1-45d9-984d-8533e9041e0c - Risk: Low, Compliance: OK",
+    "final_action": "Auto Blocked",
+    "audit_trace": [
+        "Policy Output: Conflict=False",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation determined the user role is insufficient for the transaction amount, resulting in Authorized=False. According to the decision rules, any Unauthorized event must follow the Block Path, leading to an automatic block of the transaction."
+    ]
+}

@@ -1,0 +1,10 @@
+{
+    "event_id": "6e1157c1-854e-4ffc-9472-b282dec108a5",
+    "payload": {
+        "user_id": "E202",
+        "amount": 20000.0,
+        "description": "Salary"
+    },
+    "user_authorized": false,
+    "compliance_violation": "User role/clearance insufficient for amount 20000.0; requires manager or higher clearance."
+}

@@ -1,0 +1,10 @@
+{
+    "event_id": "605521ac-e635-415c-abce-45c907709ee1",
+    "payload": {
+        "user_id": "E202",
+        "amount": 20000.0,
+        "description": "Salary"
+    },
+    "tvi_score": 0.125,
+    "risk_level": "Low"
+}

@@ -306,5 +306,82 @@
             "Compliance Output: Auth=False",
             "Decision Engine: Compliance check failed (Authorized=False) due to insufficient user role/clearance data, which overrides the low risk assessment and lack of policy conflict, mandating an automatic block."
         ]
+    },
+    {
+        "event_id": "f63a566d-7070-46fb-979c-d57be7aaad37",
+        "summary": "Event f63a566d-7070-46fb-979c-d57be7aaad37 - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-09 00:24:23",
+        "audit_trace": [
+            "Policy Output: Conflict=False",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation indicates Unauthorized: User E101 does not have the required manager role or sufficient clearance for a transaction amount of 300.0, which exceeds the permitted threshold. Despite no policy conflict and low risk, the lack of authorization mandates an automatic block."
+        ]
+    },
+    {
+        "event_id": "450cd0e1-3d3b-4aad-aa11-cf4edfccd277",
+        "summary": "Event 450cd0e1-3d3b-4aad-aa11-cf4edfccd277 - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-09 16:08:40",
+        "audit_trace": [
+            "Policy Output: Conflict=False",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance check failed: user lacks required manager or higher role for amount 200.0, resulting in Authorized=False. No policy conflict and low risk do not override the authorization failure, so the event is automatically blocked."
+        ]
+    },
+    {
+        "event_id": "6bb71e2f-a6b1-45d9-984d-8533e9041e0c",
+        "summary": "Event 6bb71e2f-a6b1-45d9-984d-8533e9041e0c - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-09 16:21:46",
+        "audit_trace": [
+            "Policy Output: Conflict=False",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation determined the user role is insufficient for the transaction amount, resulting in Authorized=False. According to the decision rules, any Unauthorized event must follow the Block Path, leading to an automatic block of the transaction."
+        ]
+    },
+    {
+        "event_id": "605521ac-e635-415c-abce-45c907709ee1",
+        "summary": "Event 605521ac-e635-415c-abce-45c907709ee1 - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-09 16:22:10",
+        "audit_trace": [
+            "Policy Output: Conflict=True",
+            "Compliance Output: Auth=False",
+            "Decision Engine: The compliance evaluation marked the transaction as unauthorized because the amount of 20,000 exceeds the permitted limit for a standard employee role, requiring a manager or higher with appropriate clearance. Although a policy conflict was also detected, the explicit unauthorized status takes precedence, resulting in an automatic block of the event."
+        ]
+    },
+    {
+        "event_id": "6e1157c1-854e-4ffc-9472-b282dec108a5",
+        "summary": "Event 6e1157c1-854e-4ffc-9472-b282dec108a5 - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-09 16:22:25",
+        "audit_trace": [
+            "Policy Output: Conflict=False",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation flagged the event as unauthorized because the user lacks the required manager role or higher clearance for a transaction amount of 20000.0. According to the rule that any Unauthorized event must be blocked, the system selects the Block Path and automatically blocks the action."
+        ]
+    },
+    {
+        "event_id": "2c662aef-9906-4be8-847c-7c1b2794ed2f",
+        "summary": "Event 2c662aef-9906-4be8-847c-7c1b2794ed2f - Risk: Medium, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-09 16:22:48",
+        "audit_trace": [
+            "Policy Output: Conflict=False",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance evaluation flagged the event as unauthorized because the user role 'employee' lacks the required 'manager' role and clearance level_2 for a salary payment of 20000. Despite no policy conflict and a medium risk rating, the authorization failure mandates an automatic block."
+        ]
+    },
+    {
+        "event_id": "07c8a1ed-e0fd-4ea0-afc9-c0c8f48182dc",
+        "summary": "Event 07c8a1ed-e0fd-4ea0-afc9-c0c8f48182dc - Risk: Low, Compliance: OK",
+        "final_action": "Auto Blocked",
+        "timestamp": "2026-04-09 16:30:00",
+        "audit_trace": [
+            "Policy Output: Conflict=False",
+            "Compliance Output: Auth=False",
+            "Decision Engine: Compliance check failed: User E101 lacks the required manager role or higher clearance for a transaction amount of 20000.0. Although the risk assessment is low, the authorization failure mandates an automatic block."
+        ]
     }
 ]

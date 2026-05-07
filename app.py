@@ -11,6 +11,14 @@ from flask_cors import CORS
 
 from database import db
 from reports import generate_macro_report
+from file_parser import ALLOWED_EXTENSIONS, chunk_text, parse_file
+
+try:
+    from vector_store import delete_document_chunks, search_chunks, upsert_chunks
+    _chroma_ok = True
+except Exception as _chroma_err:
+    _chroma_ok = False
+    print(f"[WARNING] ChromaDB unavailable — semantic search disabled: {_chroma_err}")
 
 load_dotenv()
 
@@ -463,6 +471,138 @@ def analytics_report():
     report_type = data.get("report_type", "compliance")
     result = generate_macro_report(report_type)
     return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# Policy Document routes  (Phase 1 + 2)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/policies/documents", methods=["GET"])
+def list_policy_documents():
+    docs = db.list_policy_documents(active_only=True)
+    return jsonify(docs)
+
+
+@app.route("/api/policies/documents/<document_id>", methods=["GET"])
+def get_policy_document(document_id: str):
+    doc = db.get_policy_document(document_id)
+    if not doc:
+        return jsonify({"error": "Document not found"}), 404
+    doc.pop("raw_text", None)
+    return jsonify(doc)
+
+
+@app.route("/api/policies/upload", methods=["POST"])
+def upload_policy_document():
+    if "file" not in request.files:
+        return jsonify({"error": "No file field in request"}), 400
+
+    file = request.files["file"]
+    if not file.filename:
+        return jsonify({"error": "No file selected"}), 400
+
+    filename: str = file.filename
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext not in ALLOWED_EXTENSIONS:
+        return jsonify({"error": f"Unsupported type '.{ext}'. Allowed: {sorted(ALLOWED_EXTENSIONS)}"}), 415
+
+    name = request.form.get("name", "").strip() or filename
+    sector = request.form.get("sector", "General").strip()
+    risk = request.form.get("risk", "Medium").strip()
+    description = request.form.get("description", "").strip()
+    framework = request.form.get("framework", "custom").strip()
+    tags_raw = request.form.get("tags", "").strip()
+    tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
+    uploaded_by = request.form.get("uploaded_by", "system").strip()
+
+    file_bytes = file.read()
+
+    try:
+        raw_text = parse_file(filename, file_bytes)
+    except (ValueError, RuntimeError) as exc:
+        return jsonify({"error": str(exc)}), 422
+
+    if not raw_text.strip():
+        return jsonify({"error": "No text could be extracted from the file"}), 422
+
+    chunks = chunk_text(raw_text)
+    document_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+
+    doc: Dict[str, Any] = {
+        "document_id": document_id,
+        "name": name,
+        "description": description,
+        "file_name": filename,
+        "file_type": ext,
+        "raw_text": raw_text,
+        "sector": sector,
+        "risk": risk,
+        "framework": framework,
+        "tags": tags,
+        "chunk_count": len(chunks),
+        "upload_date": now,
+        "uploaded_by": uploaded_by,
+        "source_type": "upload",
+        "version": "1.0",
+        "is_active": True,
+    }
+
+    db.add_policy_document(doc)
+
+    chroma_status = "skipped"
+    if _chroma_ok:
+        try:
+            upsert_chunks(
+                document_id=document_id,
+                chunks=chunks,
+                metadata={"name": name, "sector": sector, "framework": framework},
+            )
+            chroma_status = "indexed"
+        except Exception as exc:
+            chroma_status = f"failed: {exc}"
+
+    return jsonify(
+        {
+            "document_id": document_id,
+            "name": name,
+            "chunk_count": len(chunks),
+            "chroma_status": chroma_status,
+            "status": "stored",
+        }
+    ), 201
+
+
+@app.route("/api/policies/documents/<document_id>", methods=["DELETE"])
+def delete_policy_document(document_id: str):
+    doc = db.get_policy_document(document_id)
+    if not doc:
+        return jsonify({"error": "Document not found"}), 404
+
+    if _chroma_ok:
+        try:
+            delete_document_chunks(document_id)
+        except Exception:
+            pass
+
+    db.delete_policy_document(document_id)
+    return jsonify({"status": "deleted", "document_id": document_id})
+
+
+@app.route("/api/policies/search", methods=["POST"])
+def search_policy_chunks():
+    if not _chroma_ok:
+        return jsonify({"error": "ChromaDB not available"}), 503
+
+    data = request.get_json(force=True) or {}
+    query = str(data.get("query", "")).strip()
+    if not query:
+        return jsonify({"error": "query field required"}), 400
+
+    n = int(data.get("n_results", 5))
+    doc_filter = data.get("document_id")
+    results = search_chunks(query=query, n_results=n, document_id=doc_filter)
+    return jsonify(results)
 
 
 if __name__ == "__main__":

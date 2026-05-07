@@ -1,0 +1,9 @@
+{
+    "event_id": "6bb71e2f-a6b1-45d9-984d-8533e9041e0c",
+    "event_type": "policy_upload",
+    "payload": {
+        "user_id": "E101",
+        "amount": 20000.0,
+        "description": "Salary"
+    }
+}

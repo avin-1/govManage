@@ -1,0 +1,9 @@
+{
+    "event_id": "450cd0e1-3d3b-4aad-aa11-cf4edfccd277",
+    "event_type": "financial_txn",
+    "payload": {
+        "user_id": "E101",
+        "amount": 200.0,
+        "description": "Salary"
+    }
+}

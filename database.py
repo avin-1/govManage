@@ -22,6 +22,8 @@ class MongoGovDB:
         self.actions_col = self.db["governance_actions"]
         self.audit_logs_col = self.db["audit_logs"]
         self.reports_col = self.db["reports"]
+        self.policy_documents_col = self.db["policy_documents"]
+        self.policy_chunks_col = self.db["policy_chunks"]
 
         self._seed_defaults_if_empty()
 
@@ -185,8 +187,46 @@ class MongoGovDB:
 
         5. Governance Actions (Collection: governance_actions):
            - Fields: { event_id, event_type, payload, status, path_taken, action_taken, risk_level, tvi_score, timestamp }
+
+        6. Policy Documents (Collection: policy_documents):
+           - Fields: { document_id, name, description, file_name, file_type, sector, risk, framework,
+                       tags, chunk_count, upload_date, uploaded_by, is_active, version }
+           - Frameworks: ISO_27001, NIST_CSF, SOC2, custom
+           - Chunks stored separately in ChromaDB (collection: policy_chunks)
+
+        7. Policy Chunks (Collection: policy_chunks — metadata mirror):
+           - Fields: { chunk_id, document_id, chunk_index, text }
         """
         return schema
+
+    # ------------------------------------------------------------------
+    # Policy Documents CRUD
+    # ------------------------------------------------------------------
+
+    def add_policy_document(self, doc: Dict[str, Any]) -> str:
+        self.policy_documents_col.insert_one(dict(doc))
+        return doc["document_id"]
+
+    def get_policy_document(self, document_id: str) -> Optional[Dict[str, Any]]:
+        return self._strip_id(
+            self.policy_documents_col.find_one({"document_id": document_id})
+        )
+
+    def list_policy_documents(self, active_only: bool = True) -> List[Dict[str, Any]]:
+        query: Dict[str, Any] = {"is_active": True} if active_only else {}
+        cursor = self.policy_documents_col.find(
+            query,
+            {"raw_text": 0, "_id": 0},
+        ).sort("upload_date", -1)
+        return [dict(d) for d in cursor]
+
+    def update_policy_document(self, document_id: str, updates: Dict[str, Any]) -> None:
+        self.policy_documents_col.update_one(
+            {"document_id": document_id}, {"$set": updates}
+        )
+
+    def delete_policy_document(self, document_id: str) -> None:
+        self.policy_documents_col.delete_one({"document_id": document_id})
 
 
 db = MongoGovDB()

@@ -1,0 +1,11 @@
+{
+    "event_id": "f63a566d-7070-46fb-979c-d57be7aaad37",
+    "risk_level": "Low",
+    "compliance_violation": null,
+    "audit_trace": [
+        "Policy Output: Conflict=False",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation indicates Unauthorized: User E101 does not have the required manager role or sufficient clearance for a transaction amount of 300.0, which exceeds the permitted threshold. Despite no policy conflict and low risk, the lack of authorization mandates an automatic block."
+    ],
+    "final_action": "Auto Blocked"
+}

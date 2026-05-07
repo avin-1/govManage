@@ -589,20 +589,167 @@ def delete_policy_document(document_id: str):
     return jsonify({"status": "deleted", "document_id": document_id})
 
 
-@app.route("/api/policies/search", methods=["POST"])
-def search_policy_chunks():
+def _run_semantic_search() -> tuple:
+    """Shared logic for both semantic search endpoints."""
     if not _chroma_ok:
-        return jsonify({"error": "ChromaDB not available"}), 503
+        return jsonify({"error": "ChromaDB not available — no policy documents indexed yet"}), 503
 
     data = request.get_json(force=True) or {}
     query = str(data.get("query", "")).strip()
     if not query:
-        return jsonify({"error": "query field required"}), 400
+        return jsonify({"error": "query field is required"}), 400
 
-    n = int(data.get("n_results", 5))
+    n = min(int(data.get("n_results", 5)), 20)
     doc_filter = data.get("document_id")
+
     results = search_chunks(query=query, n_results=n, document_id=doc_filter)
-    return jsonify(results)
+
+    return jsonify({
+        "query": query,
+        "n_results": len(results),
+        "document_id_filter": doc_filter,
+        "results": results,
+    }), 200
+
+
+@app.route("/api/policies/search", methods=["POST"])
+def search_policy_chunks():
+    """Phase 2 semantic search endpoint (kept for backwards compatibility)."""
+    return _run_semantic_search()
+
+
+@app.route("/api/search/policies", methods=["POST"])
+def search_policies():
+    """Phase 3 canonical semantic search endpoint.
+
+    Body: { "query": str, "n_results": int (default 5), "document_id": str (optional filter) }
+    Returns ranked chunks from ChromaDB with source metadata and cosine distance.
+    """
+    return _run_semantic_search()
+
+
+# ---------------------------------------------------------------------------
+# Compliance Framework routes  (Phase 4)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/compliance/frameworks", methods=["GET"])
+def list_compliance_frameworks():
+    """List all seeded compliance frameworks with control counts."""
+    frameworks = db.list_frameworks()
+    return jsonify(frameworks)
+
+
+@app.route("/api/compliance/frameworks/<framework_id>", methods=["GET"])
+def get_compliance_framework(framework_id: str):
+    """Return a full framework with its controls array."""
+    framework = db.get_framework(framework_id)
+    if not framework:
+        return jsonify({"error": f"Framework '{framework_id}' not found. Available: ISO_27001, NIST_AI_RMF, GDPR, OECD_AI"}), 404
+    return jsonify(framework)
+
+
+@app.route("/api/compliance/gap-analysis", methods=["POST"])
+def compliance_gap_analysis():
+    """
+    Map uploaded policy documents against a compliance framework's controls
+    using ChromaDB semantic search, then return covered controls, gaps, and
+    recommendations.
+
+    Body:
+      { "framework_id": "ISO_27001", "distance_threshold": 0.5 }
+
+    distance_threshold: cosine distance below which a chunk is considered
+    to cover a control (0 = identical, 1 = orthogonal). Default 0.5.
+    """
+    data = request.get_json(force=True) or {}
+    framework_id = str(data.get("framework_id", "")).strip()
+    if not framework_id:
+        return jsonify({"error": "framework_id is required (ISO_27001 | NIST_AI_RMF | GDPR | OECD_AI)"}), 400
+
+    threshold = float(data.get("distance_threshold", 0.5))
+    threshold = max(0.1, min(threshold, 0.99))  # clamp to sensible range
+
+    framework = db.get_framework(framework_id)
+    if not framework:
+        return jsonify({"error": f"Framework '{framework_id}' not found"}), 404
+
+    controls: List[Dict[str, Any]] = framework.get("controls", [])
+    if not controls:
+        return jsonify({"error": "Framework has no controls defined"}), 500
+
+    covered: List[Dict[str, Any]] = []
+    gaps: List[Dict[str, Any]] = []
+
+    for ctrl in controls:
+        # Build a rich query from control title + keywords so ChromaDB can
+        # find the best matching chunk across all uploaded policy documents.
+        query_terms = [ctrl.get("title", "")] + ctrl.get("keywords", [])
+        query = " ".join(query_terms)
+
+        best_chunk = None
+        best_distance: float = 1.0
+
+        if _chroma_ok:
+            try:
+                results = search_chunks(query=query, n_results=1)
+                if results:
+                    best_distance = float(results[0].get("distance") or 1.0)
+                    if best_distance < threshold:
+                        best_chunk = results[0]
+            except Exception as exc:
+                print(f"[gap-analysis] ChromaDB search failed for {ctrl.get('control_id')}: {exc}")
+
+        if best_chunk:
+            covered.append({
+                "control_id": ctrl["control_id"],
+                "title": ctrl["title"],
+                "category": ctrl.get("category", ""),
+                "severity": ctrl.get("severity", "medium"),
+                "matched_text": best_chunk["text"][:300],
+                "source_document": best_chunk["metadata"].get("name", "Unknown"),
+                "distance": round(best_distance, 4),
+            })
+        else:
+            gaps.append({
+                "control_id": ctrl["control_id"],
+                "title": ctrl["title"],
+                "category": ctrl.get("category", ""),
+                "severity": ctrl.get("severity", "medium"),
+                "description": ctrl.get("description", ""),
+                "keywords": ctrl.get("keywords", []),
+                "mapped_risks": ctrl.get("mapped_risks", []),
+            })
+
+    total = len(controls)
+    covered_count = len(covered)
+    gap_count = len(gaps)
+    coverage_pct = round((covered_count / total * 100) if total > 0 else 0.0, 1)
+
+    # Surface highest-severity gaps first for recommendations
+    severity_order = {"high": 0, "medium": 1, "low": 2}
+    sorted_gaps = sorted(gaps, key=lambda g: severity_order.get(g.get("severity", "low"), 3))
+    high_gaps = [g for g in sorted_gaps if g.get("severity") == "high"]
+
+    recommendations = [
+        f"[{g['control_id']}] Upload a policy document covering \"{g['title']}\" — {g.get('description', '')[:120].rstrip()}..."
+        for g in (high_gaps or sorted_gaps)[:5]
+    ]
+
+    return jsonify({
+        "framework_id": framework_id,
+        "framework_name": framework["name"],
+        "version": framework.get("version", ""),
+        "total_controls": total,
+        "covered_count": covered_count,
+        "gap_count": gap_count,
+        "coverage_pct": coverage_pct,
+        "high_severity_gap_count": len(high_gaps),
+        "chroma_available": _chroma_ok,
+        "distance_threshold_used": threshold,
+        "covered": covered,
+        "gaps": sorted_gaps,
+        "recommendations": recommendations,
+    })
 
 
 if __name__ == "__main__":

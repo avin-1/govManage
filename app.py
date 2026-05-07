@@ -752,6 +752,360 @@ def compliance_gap_analysis():
     })
 
 
+# ---------------------------------------------------------------------------
+# Risk Scoring Matrix CRUD  (Phase 5)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/risk/matrix", methods=["GET"])
+def list_risk_matrices():
+    return jsonify(db.list_risk_matrices())
+
+
+@app.route("/api/risk/matrix", methods=["POST"])
+def create_risk_matrix():
+    data = request.get_json(force=True) or {}
+    required = ["event_type", "threat_factors", "vulnerability_factors", "impact_factors", "weights"]
+    missing = [f for f in required if f not in data]
+    if missing:
+        return jsonify({"error": f"Missing required fields: {missing}"}), 400
+
+    w = data.get("weights", {})
+    total = sum(float(w.get(k, 0)) for k in ("threat", "vulnerability", "impact"))
+    if not (0.99 <= total <= 1.01):
+        return jsonify({"error": f"weights must sum to 1.0, got {total:.3f}"}), 400
+
+    data["matrix_id"] = str(uuid.uuid4())
+    data.setdefault("version", "1.0")
+    data.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+    data.setdefault("is_active", True)
+    data.setdefault("threshold_low", 0.3)
+    data.setdefault("threshold_medium", 0.7)
+    data.setdefault("threshold_high", 1.0)
+
+    db.add_risk_matrix(data)
+    return jsonify({"matrix_id": data["matrix_id"], "status": "created"}), 201
+
+
+@app.route("/api/risk/matrix/<matrix_id>", methods=["PUT"])
+def update_risk_matrix(matrix_id: str):
+    existing = db.get_risk_matrix(matrix_id)
+    if not existing:
+        return jsonify({"error": "Matrix not found"}), 404
+    data = request.get_json(force=True) or {}
+    data.pop("matrix_id", None)
+    db.update_risk_matrix(matrix_id, data)
+    return jsonify({"status": "updated", "matrix_id": matrix_id})
+
+
+@app.route("/api/risk/matrix/<matrix_id>", methods=["DELETE"])
+def delete_risk_matrix(matrix_id: str):
+    existing = db.get_risk_matrix(matrix_id)
+    if not existing:
+        return jsonify({"error": "Matrix not found"}), 404
+    db.delete_risk_matrix(matrix_id)
+    return jsonify({"status": "deleted", "matrix_id": matrix_id})
+
+
+@app.route("/api/risk/score", methods=["POST"])
+def risk_score():
+    """
+    Standalone risk scoring with full breakdown.
+    Uses the risk_scoring_matrix from MongoDB + optional ChromaDB policy coverage.
+
+    Body: { "event_type": str, "payload": dict, "include_policy_coverage": bool }
+    """
+    data = request.get_json(force=True) or {}
+    event_type = str(data.get("event_type", "financial_txn")).strip()
+    payload: Dict[str, Any] = data.get("payload", {})
+    include_coverage = bool(data.get("include_policy_coverage", True))
+
+    matrix = db.get_risk_matrix_for_event(event_type)
+    if not matrix:
+        return jsonify({"error": "No risk matrix found for this event type"}), 404
+
+    # --- base TVI from existing risk_parameters (fast, backward-compat) ---
+    base_params = db.get_risk_params(event_type)
+    base_tvi = round(
+        float(base_params.get("threat", 0.5))
+        * float(base_params.get("vulnerability", 0.5))
+        * float(base_params.get("impact", 0.5)),
+        4,
+    )
+
+    # --- policy coverage adjustment (ChromaDB) ---
+    coverage_context: List[Dict[str, Any]] = []
+    coverage_adjustment = 0.0
+    rag_count = 0
+    if include_coverage and _chroma_ok:
+        description = str(payload.get("description", ""))
+        query = f"{event_type} {description}".strip()
+        try:
+            hits = search_chunks(query=query, n_results=4)
+            rag_count = len(hits)
+            coverage_context = [
+                {
+                    "source": h["metadata"].get("name", "Unknown"),
+                    "text": h["text"][:250],
+                    "distance": round(float(h.get("distance") or 1.0), 4),
+                }
+                for h in hits
+            ]
+            if hits:
+                avg_dist = sum(float(h.get("distance") or 1.0) for h in hits) / len(hits)
+                # Good coverage (low distance) reduces vulnerability score
+                coverage_adjustment = round(max(-0.15, min(0.15, avg_dist - 0.4)), 4)
+        except Exception as exc:
+            print(f"[risk/score] ChromaDB error: {exc}")
+
+    # --- compliance gap context ---
+    frameworks_matched: List[str] = []
+    try:
+        controls = db.get_controls_for_event(
+            keywords=["authorization", "access control", event_type.replace("_", " ")],
+            limit=5,
+        )
+        frameworks_matched = list({c.get("framework_id", "") for c in controls if c.get("framework_id")})
+    except Exception:
+        pass
+
+    # --- adjusted TVI ---
+    adjusted_tvi = round(max(0.0, min(1.0, base_tvi + coverage_adjustment)), 4)
+    thr_low = float(matrix.get("threshold_low", 0.3))
+    thr_med = float(matrix.get("threshold_medium", 0.7))
+    if adjusted_tvi <= thr_low:
+        risk_level = "Low"
+    elif adjusted_tvi <= thr_med:
+        risk_level = "Medium"
+    else:
+        risk_level = "High"
+
+    # --- governance maturity & compliance readiness ---
+    policy_count = db.count_policy_documents()
+    governance_maturity = round(min(1.0, policy_count * 0.2), 3)
+    compliance_readiness = round(min(1.0, (1.0 - coverage_adjustment) * (policy_count / max(1, policy_count + 2))), 3)
+
+    # --- factor definitions for explainability ---
+    breakdown: Dict[str, Any] = {
+        "matrix_used": matrix.get("matrix_id"),
+        "matrix_name": matrix.get("name"),
+        "base_tvi": base_tvi,
+        "coverage_adjustment": coverage_adjustment,
+        "adjusted_tvi": adjusted_tvi,
+        "weights": matrix.get("weights", {}),
+        "threat_factors": matrix.get("threat_factors", []),
+        "vulnerability_factors": matrix.get("vulnerability_factors", []),
+        "impact_factors": matrix.get("impact_factors", []),
+        "contributing_factors": [
+            f"Base TVI from risk parameters: {base_tvi}",
+            f"Policy coverage adjustment: {coverage_adjustment:+.4f} ({rag_count} chunks retrieved)",
+            f"Frameworks matched: {frameworks_matched or ['none']}",
+            f"Policy documents indexed: {policy_count}",
+        ],
+    }
+
+    print(
+        f"[risk/score] event={event_type} | base_tvi={base_tvi} | adj={coverage_adjustment:+.4f} "
+        f"| final={adjusted_tvi} ({risk_level}) | RAG={rag_count} | frameworks={frameworks_matched}"
+    )
+
+    return jsonify({
+        "event_type": event_type,
+        "tvi_score": adjusted_tvi,
+        "risk_level": risk_level,
+        "governance_maturity_score": governance_maturity,
+        "compliance_readiness_score": compliance_readiness,
+        "breakdown": breakdown,
+        "policy_coverage_context": coverage_context,
+        "frameworks_matched": frameworks_matched,
+        "chroma_available": _chroma_ok,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Chat  (Phase 6)
+# ---------------------------------------------------------------------------
+
+_CHAT_EVENT_KEYWORDS: Dict[str, List[str]] = {
+    "financial_txn": ["access control", "authorization", "financial", "approval", "privileged access"],
+    "security_alert": ["security", "incident", "monitoring", "logging", "breach", "audit"],
+    "policy_upload": ["policy", "governance", "documentation", "compliance", "standards"],
+}
+
+
+def _guess_event_type(text: str) -> str:
+    t = text.lower()
+    if any(w in t for w in ["financial", "transaction", "payment", "amount", "transfer", "purchase"]):
+        return "financial_txn"
+    if any(w in t for w in ["security", "alert", "breach", "incident", "attack", "intrusion"]):
+        return "security_alert"
+    if any(w in t for w in ["policy", "upload", "document", "compliance", "framework", "gdpr", "iso"]):
+        return "policy_upload"
+    return "financial_txn"
+
+
+@app.route("/api/chat/message", methods=["POST"])
+def chat_message():
+    """
+    Core chat endpoint with RAG + compliance control + risk matrix context.
+
+    Body: { "session_id": str|null, "message": str, "trigger_eval": bool }
+    Logs: RAG chunk count, frameworks matched, risk matrices used, session_id.
+    """
+    data = request.get_json(force=True) or {}
+    session_id: str = str(data.get("session_id") or "")
+    message: str = str(data.get("message", "")).strip()
+    if not message:
+        return jsonify({"error": "message field is required"}), 400
+
+    # Get or create session
+    session = db.get_chat_session(session_id) if session_id else None
+    if not session:
+        session_id = str(uuid.uuid4())
+        session = db.create_chat_session(session_id)
+
+    # --- RAG retrieval ---
+    citations: List[Dict[str, Any]] = []
+    rag_context = ""
+    rag_count = 0
+    if _chroma_ok:
+        try:
+            hits = search_chunks(query=message, n_results=4)
+            rag_count = len(hits)
+            if hits:
+                lines = ["RETRIEVED POLICY CONTEXT:"]
+                for i, h in enumerate(hits, 1):
+                    meta = h.get("metadata", {})
+                    lines.append(
+                        f"[{i}] {meta.get('name', 'Unknown')} "
+                        f"(sector: {meta.get('sector', '—')}, "
+                        f"framework: {meta.get('framework', '—')}, "
+                        f"distance: {float(h.get('distance') or 1.0):.4f})"
+                    )
+                    lines.append(f"    {h['text'][:400]}")
+                    lines.append("")
+                    citations.append({
+                        "source": meta.get("name", "Unknown"),
+                        "chunk": h["text"][:300],
+                        "distance": round(float(h.get("distance") or 1.0), 4),
+                        "framework": meta.get("framework", "—"),
+                    })
+                rag_context = "\n".join(lines)
+        except Exception as exc:
+            print(f"[Chat] ChromaDB error: {exc}")
+
+    # --- compliance control context ---
+    event_type_guess = _guess_event_type(message)
+    keywords = _CHAT_EVENT_KEYWORDS.get(event_type_guess, ["governance", "compliance"])
+    controls: List[Dict[str, Any]] = []
+    frameworks_matched: List[str] = []
+    try:
+        controls = db.get_controls_for_event(keywords=keywords, limit=4)
+        frameworks_matched = list({c.get("framework_id", "") for c in controls if c.get("framework_id")})
+    except Exception:
+        pass
+
+    controls_text = ""
+    if controls:
+        lines = ["APPLICABLE COMPLIANCE CONTROLS:"]
+        for c in controls:
+            lines.append(f"  [{c.get('framework_id')} | {c.get('control_id')}] {c.get('title')} — {c.get('description', '')[:200]}")
+        controls_text = "\n".join(lines)
+
+    # --- risk matrix context ---
+    matrix = db.get_risk_matrix_for_event(event_type_guess)
+    matrices_used = [matrix.get("event_type", "")] if matrix else []
+    matrix_text = ""
+    if matrix:
+        matrix_text = (
+            f"RISK MATRIX IN SCOPE: {matrix.get('name')} "
+            f"(thresholds: Low≤{matrix.get('threshold_low')}, "
+            f"Medium≤{matrix.get('threshold_medium')}, High>{matrix.get('threshold_medium')})"
+        )
+
+    # --- session history (last 6 messages) ---
+    history = (session.get("messages") or [])[-6:]
+    history_text = ""
+    for h in history:
+        role = "User" if h["role"] == "user" else "Assistant"
+        history_text += f"{role}: {h['content'][:400]}\n"
+
+    # --- LLM call ---
+    schema_ctx = db.get_schema_context()
+    system_prompt = (
+        "You are GovManage AI, an expert in governance, risk, and compliance (GRC). "
+        "Answer questions using the retrieved policy context when available. "
+        "Be concise, cite specific controls or policy excerpts, and use bullet points for clarity. "
+        "If asked to evaluate a specific transaction, explain how to use the event evaluator. "
+        "Do not fabricate policies — only reference what is in the provided context."
+    )
+
+    user_prompt = "\n\n".join(filter(None, [
+        schema_ctx,
+        rag_context,
+        controls_text,
+        matrix_text,
+        f"CONVERSATION HISTORY:\n{history_text}" if history_text else "",
+        f"User question: {message}",
+    ]))
+
+    response_text = "AI service unavailable — check GROQ_API_KEY in your .env file."
+    if ChatGroq is not None and os.getenv("GROQ_API_KEY"):
+        try:
+            chat_llm = ChatGroq(model_name=os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"))
+            resp = chat_llm.invoke([
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt),
+            ])
+            response_text = resp.content.strip()
+        except Exception as exc:
+            response_text = f"AI response error: {exc}"
+
+    # --- build context_used metadata for logging + frontend display ---
+    context_used: Dict[str, Any] = {
+        "rag_chunks_retrieved": rag_count,
+        "frameworks_matched": frameworks_matched,
+        "risk_matrices_used": matrices_used,
+        "session_id": session_id,
+    }
+
+    print(
+        f"[Chat] session={session_id} | RAG={rag_count} chunks "
+        f"| frameworks={frameworks_matched} | matrices={matrices_used}"
+    )
+
+    now = datetime.now(timezone.utc).isoformat()
+    user_msg: Dict[str, Any] = {
+        "role": "user", "content": message,
+        "timestamp": now, "context_used": None, "citations": [],
+    }
+    asst_msg: Dict[str, Any] = {
+        "role": "assistant", "content": response_text,
+        "timestamp": now, "context_used": context_used, "citations": citations,
+    }
+    db.append_chat_messages(session_id, [user_msg, asst_msg])
+
+    return jsonify({
+        "session_id": session_id,
+        "response": response_text,
+        "citations": citations,
+        "context_used": context_used,
+        "event_triggered": None,
+    })
+
+
+@app.route("/api/chat/sessions", methods=["GET"])
+def list_chat_sessions():
+    return jsonify(db.list_chat_sessions())
+
+
+@app.route("/api/chat/sessions/<session_id>", methods=["GET"])
+def get_chat_session(session_id: str):
+    session = db.get_chat_session(session_id)
+    if not session:
+        return jsonify({"error": "Session not found"}), 404
+    return jsonify(session)
+
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
     app.run(port=port, debug=False)

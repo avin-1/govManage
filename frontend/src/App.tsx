@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Activity, CheckCircle, Database, FileText, ShieldCheck, Sparkles, XCircle, AlertTriangle, FileBarChart, PieChart, Info, ChevronRight, Upload, Trash2, FileCheck } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Activity, CheckCircle, Database, FileText, ShieldCheck, Sparkles, XCircle, AlertTriangle, FileBarChart, PieChart, Info, ChevronRight, Upload, Trash2, FileCheck, MessageSquare, Send, Bot, User } from 'lucide-react';
 import { Chart as ChartJS, CategoryScale, Filler, Legend, LineElement, LinearScale, PointElement, Title, Tooltip } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 
@@ -104,6 +104,27 @@ type UploadForm = {
   framework: string;
 };
 
+type Citation = {
+  name: string;
+  sector?: string;
+  framework?: string;
+  distance?: number;
+};
+
+type ContextUsed = {
+  rag_chunks: number;
+  frameworks: string[];
+  matrices: string[];
+};
+
+type ChatMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+  citations?: Citation[];
+  context_used?: ContextUsed;
+  timestamp?: string;
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [kpis, setKpis] = useState<Kpis>({ active_policies: 0, compliance_pct: 0, citizen_satisfaction: 0, risk_index: 0 });
@@ -133,6 +154,13 @@ export default function App() {
   const [uploadForm, setUploadForm] = useState<UploadForm>({
     name: '', sector: 'Finance', risk: 'Medium', description: '', framework: 'custom',
   });
+
+  // Chat state
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatSessionId, setChatSessionId] = useState<string | null>(null);
+  const [isChatting, setIsChatting] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchData();
@@ -276,6 +304,43 @@ export default function App() {
     }
   };
 
+  const sendChatMessage = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const text = chatInput.trim();
+    if (!text || isChatting) return;
+
+    const userMsg: ChatMessage = { role: 'user', content: text, timestamp: new Date().toISOString() };
+    setChatMessages(prev => [...prev, userMsg]);
+    setChatInput('');
+    setIsChatting(true);
+
+    try {
+      const res = await fetch(`${API_URL}/chat/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: chatSessionId, message: text }),
+      });
+      const data = await res.json();
+      if (data.session_id) setChatSessionId(data.session_id);
+      const aiMsg: ChatMessage = {
+        role: 'assistant',
+        content: data.response || 'No response received.',
+        citations: data.citations || [],
+        context_used: data.context_used,
+        timestamp: new Date().toISOString(),
+      };
+      setChatMessages(prev => [...prev, aiMsg]);
+    } catch {
+      setChatMessages(prev => [
+        ...prev,
+        { role: 'assistant', content: 'Connection error — ensure the backend is running on port 5000.' },
+      ]);
+    } finally {
+      setIsChatting(false);
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+    }
+  };
+
   const trendSeries = useMemo(() => {
     const recent = [...transactions].slice(0, 6).reverse();
     if (recent.length > 0) {
@@ -324,6 +389,9 @@ export default function App() {
           </button>
           <button onClick={() => setActiveTab('reports')} className={`nav-item ${activeTab === 'reports' ? 'active' : ''}`}>
             <FileBarChart size={16} className={activeTab==='reports'? 'text-blue-400' : 'opacity-70'}/> Advanced Reports
+          </button>
+          <button onClick={() => setActiveTab('chat')} className={`nav-item ${activeTab === 'chat' ? 'active' : ''}`}>
+            <MessageSquare size={16} className={activeTab==='chat'? 'text-blue-400' : 'opacity-70'}/> AI Policy Chat
           </button>
         </div>
         
@@ -897,6 +965,121 @@ export default function App() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {/* --- CHAT VIEW --- */}
+          {activeTab === 'chat' && (
+            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 flex flex-col" style={{ height: 'calc(100vh - 9rem)' }}>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-3xl font-bold text-slate-800 tracking-tight">AI Policy Chat</h2>
+                  <p className="text-sm text-slate-500 mt-1">Ask questions about governance policies, compliance frameworks, and risk — powered by RAG.</p>
+                </div>
+                {chatSessionId && (
+                  <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-1 rounded">
+                    session: {chatSessionId.slice(-8)}
+                  </span>
+                )}
+              </div>
+
+              {/* Message history */}
+              <div className="flex-1 overflow-y-auto enterprise-panel p-4 space-y-4 min-h-0">
+                {chatMessages.length === 0 && !isChatting && (
+                  <div className="flex flex-col items-center justify-center h-full text-center py-16 opacity-60">
+                    <MessageSquare size={40} className="text-slate-300 mb-3" />
+                    <p className="font-semibold text-slate-500">No messages yet.</p>
+                    <p className="text-xs text-slate-400 mt-1 max-w-xs">
+                      Ask about a policy, compliance requirement, or event risk — e.g. "What controls apply to financial transactions?"
+                    </p>
+                  </div>
+                )}
+
+                {chatMessages.map((msg, idx) => (
+                  <div key={idx} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    {msg.role === 'assistant' && (
+                      <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 shrink-0 mt-0.5">
+                        <Bot size={16} />
+                      </div>
+                    )}
+                    <div className={`max-w-[75%] flex flex-col gap-1.5 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                      <div
+                        className={`px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
+                          msg.role === 'user'
+                            ? 'bg-primary text-white rounded-br-sm'
+                            : 'bg-white border border-slate-200 text-slate-800 rounded-bl-sm shadow-sm'
+                        }`}
+                      >
+                        {msg.content}
+                      </div>
+
+                      {/* Citations */}
+                      {msg.role === 'assistant' && msg.citations && msg.citations.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 px-1">
+                          {msg.citations.map((c, cIdx) => (
+                            <span
+                              key={cIdx}
+                              title={`${c.framework || ''}${c.distance !== undefined ? ` | dist: ${c.distance.toFixed(3)}` : ''}`}
+                              className="inline-flex items-center gap-1 text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-full cursor-default"
+                            >
+                              <FileCheck size={10} />
+                              {c.name || 'Source'}
+                              {c.sector ? ` · ${c.sector}` : ''}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Context stats */}
+                      {msg.role === 'assistant' && msg.context_used && (
+                        <p className="text-[10px] text-slate-400 px-1">
+                          {msg.context_used.rag_chunks} chunks
+                          {msg.context_used.frameworks?.length > 0 ? ` · ${msg.context_used.frameworks.join(', ')}` : ''}
+                        </p>
+                      )}
+                    </div>
+                    {msg.role === 'user' && (
+                      <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white shrink-0 mt-0.5">
+                        <User size={16} />
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {isChatting && (
+                  <div className="flex gap-3 justify-start">
+                    <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+                      <Bot size={16} />
+                    </div>
+                    <div className="px-4 py-3 rounded-2xl rounded-bl-sm bg-white border border-slate-200 shadow-sm flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                      <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                      <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                    </div>
+                  </div>
+                )}
+
+                <div ref={chatEndRef} />
+              </div>
+
+              {/* Input bar */}
+              <form onSubmit={sendChatMessage} className="mt-3 flex gap-3 items-center">
+                <input
+                  className="input flex-1"
+                  placeholder="Ask about a policy, compliance requirement, or risk scenario..."
+                  value={chatInput}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setChatInput(e.target.value)}
+                  disabled={isChatting}
+                />
+                <button
+                  type="submit"
+                  disabled={isChatting || !chatInput.trim()}
+                  className="btn-primary !px-5 !py-2.5 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shrink-0"
+                >
+                  <Send size={15} />
+                  {isChatting ? 'Thinking...' : 'Send'}
+                </button>
+              </form>
             </div>
           )}
 

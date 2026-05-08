@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, CheckCircle, Database, FileText, ShieldCheck, Sparkles, XCircle, AlertTriangle, FileBarChart, PieChart, Info, ChevronRight, Upload, Trash2, FileCheck, MessageSquare, Send, Bot, User, Wand2 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { Activity, CheckCircle, Database, FileText, ShieldCheck, Sparkles, XCircle, AlertTriangle, FileBarChart, PieChart, Info, ChevronRight, Upload, Trash2, FileCheck, MessageSquare, Send, Bot, User, Wand2, Download } from 'lucide-react';
 import { Chart as ChartJS, CategoryScale, Filler, Legend, LineElement, LinearScale, PointElement, Title, Tooltip } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 
@@ -149,10 +151,9 @@ export default function App() {
   const [masters, setMasters] = useState<MasterPolicy[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isFetchingReport, setIsFetchingReport] = useState(false);
-  
   const [isGeneratingMacro, setIsGeneratingMacro] = useState<string | null>(null);
   const [macroReport, setMacroReport] = useState<MacroReport | null>(null);
+  const [lastReportType, setLastReportType] = useState<string>('report');
 
   const [eventInput, setEventInput] = useState<EventInput>({
     user_id: '',
@@ -162,7 +163,6 @@ export default function App() {
     mode: 'agentic' as TriggerMode,
   });
   const [customResult, setCustomResult] = useState<DecisionResult | null>(null);
-  const [latestReport, setLatestReport] = useState<ReportResult | null>(null);
 
   // Policy document upload state
   const [policyDocs, setPolicyDocs] = useState<PolicyDocument[]>([]);
@@ -231,7 +231,6 @@ export default function App() {
       const data: DecisionResult = await res.json();
       setCustomResult(data);
       await fetchData();
-      await fetchLatestReport();
     } catch (e) {
       setCustomResult({ error: 'Submission failed' });
     } finally {
@@ -239,30 +238,9 @@ export default function App() {
     }
   };
 
-  const fetchLatestReport = async () => {
-    setIsFetchingReport(true);
-    try {
-      const res = await fetch(`${API_URL}/reports?ts=${Date.now()}`, { cache: 'no-store' });
-      const reports: ReportResult[] = await res.json();
-      if (Array.isArray(reports) && reports.length > 0) {
-        const newest = [...reports].sort((a: ReportResult, b: ReportResult) => {
-          const ta = new Date(a.timestamp || 0).getTime();
-          const tb = new Date(b.timestamp || 0).getTime();
-          return tb - ta;
-        })[0];
-        setLatestReport(newest);
-      } else {
-        setLatestReport({ error: 'No reports found' });
-      }
-    } catch (e) {
-      setLatestReport({ error: 'Failed to fetch reports' });
-    } finally {
-      setIsFetchingReport(false);
-    }
-  };
-
   const generateMacroReport = async (type: string) => {
     setIsGeneratingMacro(type);
+    setLastReportType(type);
     setMacroReport(null);
     try {
       const res = await fetch(`${API_URL}/analytics/report`, {
@@ -359,6 +337,206 @@ export default function App() {
     } finally {
       setIsGeneratingPolicy(false);
     }
+  };
+
+  // -------------------------------------------------------------------------
+  // PDF exports
+  // -------------------------------------------------------------------------
+
+  const downloadGeneratedPolicyPDF = (policy: GeneratedPolicy, meta: { sector: string; risk_level: string; framework: string }) => {
+    const doc = new jsPDF();
+    const pageW = doc.internal.pageSize.getWidth();
+    const margin = 14;
+    const contentW = pageW - margin * 2;
+    let y = 20;
+
+    const addWrappedText = (text: string, x: number, startY: number, maxW: number, lineH: number): number => {
+      const lines = doc.splitTextToSize(text, maxW);
+      doc.text(lines, x, startY);
+      return startY + lines.length * lineH;
+    };
+
+    // Header bar
+    doc.setFillColor(109, 40, 217);
+    doc.rect(0, 0, pageW, 14, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(9);
+    doc.text('GovManage — AI Generated Policy', margin, 9);
+    doc.text(new Date().toLocaleDateString(), pageW - margin, 9, { align: 'right' });
+
+    y = 24;
+    doc.setTextColor(30, 30, 30);
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    y = addWrappedText(policy.name, margin, y, contentW, 8) + 4;
+
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Sector: ${meta.sector}   |   Risk: ${meta.risk_level}   |   Framework: ${meta.framework}`, margin, y);
+    y += 10;
+
+    const section = (title: string) => {
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(109, 40, 217);
+      doc.text(title, margin, y);
+      y += 1;
+      doc.setDrawColor(200, 180, 240);
+      doc.line(margin, y, pageW - margin, y);
+      y += 5;
+      doc.setTextColor(30, 30, 30);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+    };
+
+    section('PURPOSE');
+    y = addWrappedText(policy.purpose, margin, y, contentW, 5) + 8;
+
+    section('SCOPE');
+    y = addWrappedText(policy.scope, margin, y, contentW, 5) + 8;
+
+    section('POLICY STATEMENTS');
+    policy.policy_statements.forEach((s, i) => {
+      y = addWrappedText(`${i + 1}. ${s}`, margin + 2, y, contentW - 4, 5) + 3;
+      if (y > 270) { doc.addPage(); y = 20; }
+    });
+    y += 5;
+
+    section('CONTROLS');
+    policy.controls.forEach((c) => {
+      y = addWrappedText(`• ${c}`, margin + 2, y, contentW - 4, 5) + 3;
+      if (y > 270) { doc.addPage(); y = 20; }
+    });
+    y += 5;
+
+    if (y > 240) { doc.addPage(); y = 20; }
+    section('ENFORCEMENT');
+    y = addWrappedText(policy.enforcement, margin, y, contentW, 5) + 8;
+
+    section('REVIEW CYCLE');
+    addWrappedText(policy.review_cycle, margin, y, contentW, 5);
+
+    doc.save(`${policy.name.replace(/\s+/g, '_')}.pdf`);
+  };
+
+  const downloadMacroReportPDF = (report: MacroReport, reportType: string) => {
+    const doc = new jsPDF();
+    const pageW = doc.internal.pageSize.getWidth();
+    const margin = 14;
+    const contentW = pageW - margin * 2;
+    let y = 20;
+
+    const addWrappedText = (text: string, x: number, startY: number, maxW: number, lineH: number): number => {
+      const lines = doc.splitTextToSize(text, maxW);
+      doc.text(lines, x, startY);
+      return startY + lines.length * lineH;
+    };
+
+    // Header bar
+    doc.setFillColor(37, 99, 235);
+    doc.rect(0, 0, pageW, 14, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(9);
+    doc.text('GovManage — Macro Report', margin, 9);
+    doc.text(new Date().toLocaleDateString(), pageW - margin, 9, { align: 'right' });
+
+    y = 24;
+    doc.setTextColor(30, 30, 30);
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${reportType.charAt(0).toUpperCase() + reportType.slice(1)} Report`, margin, y);
+    y += 12;
+
+    // Executive summary
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(37, 99, 235);
+    doc.text('EXECUTIVE SUMMARY', margin, y);
+    y += 6;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(30, 30, 30);
+    y = addWrappedText(report.executive_summary || '', margin, y, contentW, 5) + 10;
+
+    // Key findings
+    if (report.key_findings && report.key_findings.length > 0) {
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(37, 99, 235);
+      doc.text('KEY FINDINGS', margin, y);
+      y += 6;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(30, 30, 30);
+      report.key_findings.forEach((f, i) => {
+        y = addWrappedText(`${i + 1}. ${f}`, margin + 2, y, contentW - 4, 5) + 4;
+        if (y > 270) { doc.addPage(); y = 20; }
+      });
+      y += 6;
+    }
+
+    // Data table
+    if (report.data_table && report.data_table.length > 0) {
+      const headers = Object.keys(report.data_table[0]);
+      autoTable(doc, {
+        startY: y,
+        head: [headers],
+        body: report.data_table.map(row => headers.map(h => String(row[h] ?? ''))),
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [245, 247, 255] },
+        margin: { left: margin, right: margin },
+      });
+    }
+
+    doc.save(`GovManage_${reportType}_report_${Date.now()}.pdf`);
+  };
+
+  const downloadAuditPDF = (txns: Transaction[]) => {
+    const doc = new jsPDF();
+    const pageW = doc.internal.pageSize.getWidth();
+    const margin = 14;
+
+    // Header bar
+    doc.setFillColor(15, 23, 42);
+    doc.rect(0, 0, pageW, 14, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(9);
+    doc.text('GovManage — Audit Trail Export', margin, 9);
+    doc.text(new Date().toLocaleString(), pageW - margin, 9, { align: 'right' });
+
+    doc.setTextColor(30, 30, 30);
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Audit Ledger', margin, 26);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 100);
+    doc.text(`${txns.length} record(s) exported`, margin, 33);
+
+    autoTable(doc, {
+      startY: 40,
+      head: [['Timestamp', 'Event ID', 'Status', 'Action', 'Risk', 'TVI']],
+      body: txns.map(t => [
+        t.timestamp ? new Date(t.timestamp).toLocaleString() : '—',
+        t.event_id,
+        t.status || '—',
+        t.action_taken || '—',
+        t.risk_level || '—',
+        t.tvi_score !== undefined ? String(t.tvi_score) : '—',
+      ]),
+      styles: { fontSize: 8, cellPadding: 3 },
+      headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      columnStyles: {
+        1: { font: 'courier', fontSize: 7 },
+        2: { fontStyle: 'bold' },
+      },
+      margin: { left: 14, right: 14 },
+    });
+
+    doc.save(`GovManage_audit_${Date.now()}.pdf`);
   };
 
   const sendChatMessage = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -726,7 +904,15 @@ export default function App() {
                       {/* Executive Summary */}
                       <div className="bg-gradient-to-br from-indigo-50 to-blue-50 border border-blue-100 rounded-xl p-8 relative overflow-hidden shadow-sm">
                         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-400/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
-                        <h3 className="text-[11px] font-bold uppercase tracking-widest text-indigo-500 mb-3 flex items-center gap-2"><Info size={14}/> Executive Analytics Summary</h3>
+                        <div className="flex items-start justify-between mb-3 relative z-10">
+                          <h3 className="text-[11px] font-bold uppercase tracking-widest text-indigo-500 flex items-center gap-2"><Info size={14}/> Executive Analytics Summary</h3>
+                          <button
+                            onClick={() => downloadMacroReportPDF(macroReport, lastReportType)}
+                            className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 bg-white/70 border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-white transition-colors shrink-0 ml-4"
+                          >
+                            <Download size={13} /> Download PDF
+                          </button>
+                        </div>
                         <p className="text-base text-slate-800 leading-relaxed font-medium relative z-10">{macroReport.executive_summary}</p>
                       </div>
 
@@ -881,9 +1067,17 @@ export default function App() {
                 {/* Generated policy preview */}
                 {generatedPolicy && (
                   <div className="mt-6 border-t border-slate-100 pt-5 space-y-4 animate-in slide-in-from-top-2 duration-300">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Sparkles size={15} className="text-violet-500" />
-                      <h4 className="font-bold text-slate-800 tracking-tight">{generatedPolicy.name}</h4>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Sparkles size={15} className="text-violet-500" />
+                        <h4 className="font-bold text-slate-800 tracking-tight">{generatedPolicy.name}</h4>
+                      </div>
+                      <button
+                        onClick={() => downloadGeneratedPolicyPDF(generatedPolicy, { sector: generateForm.sector, risk_level: generateForm.risk_level, framework: generateForm.framework })}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-3 py-1.5 rounded-lg hover:bg-violet-100 transition-colors"
+                      >
+                        <Download size={13} /> Download PDF
+                      </button>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1134,9 +1328,18 @@ export default function App() {
             <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-6">
               <div className="flex justify-between items-center mb-6">
                  <h2 className="text-3xl font-bold text-slate-800 tracking-tight">Audit Trail History</h2>
-                 <button onClick={fetchData} className="btn-primary !py-2 !bg-white !text-slate-800 border-slate-200 shadow-sm hover:!bg-slate-50 !font-bold">
-                   <Activity size={14}/> Sync Vault
-                 </button>
+                 <div className="flex items-center gap-2">
+                   <button
+                     onClick={() => downloadAuditPDF(transactions)}
+                     disabled={transactions.length === 0}
+                     className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                   >
+                     <Download size={13} /> Export PDF
+                   </button>
+                   <button onClick={fetchData} className="btn-primary !py-2 !bg-white !text-slate-800 border-slate-200 shadow-sm hover:!bg-slate-50 !font-bold">
+                     <Activity size={14}/> Sync Vault
+                   </button>
+                 </div>
               </div>
               <div className="enterprise-panel p-0 overflow-hidden shadow-md">
                 <table className="w-full text-left border-collapse">

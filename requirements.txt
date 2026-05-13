@@ -16,3 +16,4 @@ pytest>=9.0.2
 python-dotenv>=1.2.2
 uvicorn>=0.42.0
 watchdog>=6.0.0
+firecrawl-py>=1.0.0

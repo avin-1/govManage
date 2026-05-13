@@ -27,6 +27,8 @@ class MongoGovDB:
         self.frameworks_col = self.db["compliance_frameworks"]
         self.risk_matrix_col = self.db["risk_scoring_matrix"]
         self.chat_sessions_col = self.db["chat_sessions"]
+        self.trusted_sources_col = self.db["trusted_sources"]
+        self.crawled_pages_col = self.db["crawled_pages"]
 
         self._seed_defaults_if_empty()
         self._seed_frameworks_if_empty()
@@ -599,6 +601,97 @@ class MongoGovDB:
 
     def delete_policy_document(self, document_id: str) -> None:
         self.policy_documents_col.delete_one({"document_id": document_id})
+
+    # ------------------------------------------------------------------
+    # Trusted Regulatory Sources
+    # ------------------------------------------------------------------
+
+    def add_trusted_source(self, doc: Dict[str, Any]) -> str:
+        self.trusted_sources_col.insert_one(dict(doc))
+        return doc["source_id"]
+
+    def list_trusted_sources(self, active_only: bool = False) -> List[Dict[str, Any]]:
+        query: Dict[str, Any] = {"active": True} if active_only else {}
+        return [self._strip_id(d) for d in self.trusted_sources_col.find(query).sort("name", 1)]
+
+    def get_trusted_source(self, source_id: str) -> Optional[Dict[str, Any]]:
+        return self._strip_id(self.trusted_sources_col.find_one({"source_id": source_id}))
+
+    def update_trusted_source(self, source_id: str, updates: Dict[str, Any]) -> None:
+        self.trusted_sources_col.update_one({"source_id": source_id}, {"$set": updates})
+
+    def delete_trusted_source(self, source_id: str) -> None:
+        self.trusted_sources_col.delete_one({"source_id": source_id})
+
+    def count_trusted_sources(self, active_only: bool = True) -> int:
+        query: Dict[str, Any] = {"active": True} if active_only else {}
+        return self.trusted_sources_col.count_documents(query)
+
+    def get_due_sources(self) -> List[Dict[str, Any]]:
+        """Return active sources whose next crawl date is in the past."""
+        import datetime as _dt
+        now_iso = _dt.datetime.now(_dt.timezone.utc).isoformat()
+        # Sources never crawled, or where last_crawled + frequency <= now
+        pipeline = [
+            {"$match": {"active": True}},
+            {"$addFields": {
+                "next_crawl": {
+                    "$cond": {
+                        "if": {"$ifNull": ["$last_crawled", False]},
+                        "then": {
+                            "$dateAdd": {
+                                "startDate": {"$toDate": "$last_crawled"},
+                                "unit": "day",
+                                "amount": {"$ifNull": ["$crawl_frequency_days", 30]},
+                            }
+                        },
+                        "else": {"$toDate": "1970-01-01"},
+                    }
+                }
+            }},
+            {"$match": {"next_crawl": {"$lte": {"$toDate": now_iso}}}},
+            {"$project": {"_id": 0}},
+        ]
+        try:
+            return list(self.trusted_sources_col.aggregate(pipeline))
+        except Exception:
+            # Fallback for older MongoDB without $dateAdd
+            return [
+                self._strip_id(d)
+                for d in self.trusted_sources_col.find({"active": True, "last_crawled": None})
+            ]
+
+    # ------------------------------------------------------------------
+    # Crawled Pages
+    # ------------------------------------------------------------------
+
+    def add_crawled_page(self, doc: Dict[str, Any]) -> str:
+        self.crawled_pages_col.insert_one(dict(doc))
+        return doc.get("document_id", "")
+
+    def get_crawled_page_by_url(self, url: str) -> Optional[Dict[str, Any]]:
+        return self._strip_id(self.crawled_pages_col.find_one({"url": url}))
+
+    def update_crawled_page(self, url: str, updates: Dict[str, Any]) -> None:
+        updates_clean = {k: v for k, v in updates.items() if k != "url"}
+        self.crawled_pages_col.update_one({"url": url}, {"$set": updates_clean})
+
+    def list_crawled_pages(self, source_id: Optional[str] = None, limit: int = 200) -> List[Dict[str, Any]]:
+        query: Dict[str, Any] = {"source_id": source_id} if source_id else {}
+        return [
+            self._strip_id(d)
+            for d in self.crawled_pages_col.find(query, {"raw_text": 0, "_id": 0})
+            .sort("crawl_timestamp", -1)
+            .limit(limit)
+        ]
+
+    def delete_crawled_pages_by_source(self, source_id: str) -> int:
+        result = self.crawled_pages_col.delete_many({"source_id": source_id})
+        return result.deleted_count
+
+    def count_crawled_pages(self, source_id: Optional[str] = None) -> int:
+        query: Dict[str, Any] = {"source_id": source_id} if source_id else {}
+        return self.crawled_pages_col.count_documents(query)
 
 
 db = MongoGovDB()

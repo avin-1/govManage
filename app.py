@@ -1,8 +1,9 @@
 from datetime import datetime, timezone
 import json
 import os
-import uuid
+import threading
 import time
+import uuid
 from typing import Any, Dict, List, Tuple
 
 from dotenv import load_dotenv
@@ -19,6 +20,13 @@ try:
 except Exception as _chroma_err:
     _chroma_ok = False
     print(f"[WARNING] ChromaDB unavailable — semantic search disabled: {_chroma_err}")
+
+try:
+    from crawler import crawl_source, check_and_crawl_due_sources
+    _crawler_ok = True
+except Exception as _crawler_err:
+    _crawler_ok = False
+    print(f"[WARNING] Crawler unavailable: {_crawler_err}")
 
 load_dotenv()
 
@@ -307,7 +315,7 @@ def get_kpis():
         {
             "active_policies": len(db.list_policies()),
             "compliance_pct": round(compliance_pct, 1),
-            "citizen_satisfaction": 84,
+            "crawled_sources": db.count_trusted_sources(active_only=True),
             "risk_index": risk_index,
         }
     )
@@ -1260,6 +1268,126 @@ Include at least 5 policy_statements and 4 controls. Be specific, not generic.""
         "chroma_status": chroma_status,
         "policy": policy_json,
     }), 201
+
+
+# ---------------------------------------------------------------------------
+# Trusted Regulatory Sources — CRUD
+# ---------------------------------------------------------------------------
+
+@app.route("/api/sources", methods=["GET"])
+def list_sources():
+    sources = db.list_trusted_sources()
+    for s in sources:
+        s["page_count"] = db.count_crawled_pages(s.get("source_id"))
+    return jsonify(sources)
+
+
+@app.route("/api/sources", methods=["POST"])
+def add_source():
+    body = request.get_json(silent=True) or {}
+    base_url = (body.get("base_url") or "").strip()
+    name = (body.get("name") or "").strip()
+    if not base_url or not name:
+        return jsonify({"error": "name and base_url are required"}), 400
+
+    source_id = f"src_{uuid.uuid4().hex[:10]}"
+    doc = {
+        "source_id": source_id,
+        "name": name,
+        "base_url": base_url,
+        "region": (body.get("region") or "Global").strip(),
+        "framework_type": (body.get("framework_type") or "General").strip(),
+        "crawl_frequency_days": int(body.get("crawl_frequency_days") or 30),
+        "crawl_limit": int(body.get("crawl_limit") or 50),
+        "tags": body.get("tags") or [],
+        "active": bool(body.get("active", True)),
+        "last_crawled": None,
+        "last_error": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    db.add_trusted_source(doc)
+    print(f"[sources] Added: {source_id} — {name}")
+    return jsonify(doc), 201
+
+
+@app.route("/api/sources/<source_id>", methods=["PUT"])
+def update_source(source_id: str):
+    body = request.get_json(silent=True) or {}
+    allowed = {"name", "base_url", "region", "framework_type",
+               "crawl_frequency_days", "crawl_limit", "tags", "active"}
+    updates = {k: v for k, v in body.items() if k in allowed}
+    if not updates:
+        return jsonify({"error": "No valid fields to update"}), 400
+    db.update_trusted_source(source_id, updates)
+    return jsonify({"updated": source_id, "fields": list(updates.keys())})
+
+
+@app.route("/api/sources/<source_id>", methods=["DELETE"])
+def delete_source(source_id: str):
+    source = db.get_trusted_source(source_id)
+    if not source:
+        return jsonify({"error": "Source not found"}), 404
+    # Remove all crawled pages + their ChromaDB vectors
+    pages = db.list_crawled_pages(source_id=source_id)
+    if _chroma_ok:
+        for p in pages:
+            try:
+                delete_document_chunks(p["document_id"])
+            except Exception:
+                pass
+    deleted_pages = db.delete_crawled_pages_by_source(source_id)
+    db.delete_trusted_source(source_id)
+    print(f"[sources] Deleted: {source_id} — {deleted_pages} pages removed")
+    return jsonify({"deleted": source_id, "pages_removed": deleted_pages})
+
+
+@app.route("/api/sources/<source_id>/crawl", methods=["POST"])
+def trigger_crawl(source_id: str):
+    """Trigger an immediate crawl for a source (runs in background thread)."""
+    source = db.get_trusted_source(source_id)
+    if not source:
+        return jsonify({"error": "Source not found"}), 404
+    if not _crawler_ok:
+        return jsonify({"error": "Crawler not available — check firecrawl-py installation"}), 503
+
+    def _run():
+        result = crawl_source(source_id)
+        print(f"[sources/crawl] {source_id}: {result}")
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    return jsonify({
+        "status": "crawl_started",
+        "source_id": source_id,
+        "message": f"Crawling '{source.get('name')}' in background. Refresh pages list in a few seconds.",
+    })
+
+
+@app.route("/api/sources/<source_id>/pages", methods=["GET"])
+def list_source_pages(source_id: str):
+    pages = db.list_crawled_pages(source_id=source_id, limit=200)
+    return jsonify(pages)
+
+
+# ---------------------------------------------------------------------------
+# Background scheduler — checks for due sources every hour
+# ---------------------------------------------------------------------------
+
+def _scheduler_loop():
+    time.sleep(30)  # startup delay
+    while True:
+        try:
+            if _crawler_ok:
+                results = check_and_crawl_due_sources()
+                if results:
+                    print(f"[Scheduler] Auto-crawled {len(results)} sources")
+        except Exception as e:
+            print(f"[Scheduler] Error: {e}")
+        time.sleep(3600)  # check hourly
+
+
+_sched_thread = threading.Thread(target=_scheduler_loop, daemon=True)
+_sched_thread.start()
 
 
 if __name__ == "__main__":

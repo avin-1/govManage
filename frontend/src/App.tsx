@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Activity, CheckCircle, Database, FileText, ShieldCheck, Sparkles, XCircle, AlertTriangle, FileBarChart, PieChart, Info, ChevronRight, Upload, Trash2, FileCheck, MessageSquare, Send, Bot, User, Wand2, Download } from 'lucide-react';
+import { Activity, CheckCircle, Database, FileText, ShieldCheck, Sparkles, XCircle, AlertTriangle, FileBarChart, PieChart, Info, ChevronRight, Upload, Trash2, FileCheck, MessageSquare, Send, Bot, User, Wand2, Download, Globe, RefreshCw, ExternalLink, Plus, Pencil } from 'lucide-react';
 import { Chart as ChartJS, CategoryScale, Filler, Legend, LineElement, LinearScale, PointElement, Title, Tooltip } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 
@@ -14,7 +14,7 @@ type TriggerMode = 'minimum' | 'rule_engine' | 'advanced' | 'agentic';
 type Kpis = {
   active_policies: number;
   compliance_pct: number;
-  citizen_satisfaction: number;
+  crawled_sources: number;
   risk_index: number;
 };
 
@@ -124,6 +124,30 @@ type GenerateForm = {
   event_type: string;
 };
 
+type TrustedSource = {
+  source_id: string;
+  name: string;
+  base_url: string;
+  region: string;
+  framework_type: string;
+  crawl_frequency_days: number;
+  crawl_limit: number;
+  active: boolean;
+  last_crawled: string | null;
+  last_error: string | null;
+  page_count?: number;
+  last_crawl_summary?: { pages_crawled: number; pages_updated: number; pages_unchanged: number };
+};
+
+type SourceForm = {
+  name: string;
+  base_url: string;
+  region: string;
+  framework_type: string;
+  crawl_frequency_days: string;
+  crawl_limit: string;
+};
+
 type Citation = {
   name: string;
   sector?: string;
@@ -147,7 +171,7 @@ type ChatMessage = {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [kpis, setKpis] = useState<Kpis>({ active_policies: 0, compliance_pct: 0, citizen_satisfaction: 0, risk_index: 0 });
+  const [kpis, setKpis] = useState<Kpis>({ active_policies: 0, compliance_pct: 0, crawled_sources: 0, risk_index: 0 });
   const [masters, setMasters] = useState<MasterPolicy[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -182,6 +206,17 @@ export default function App() {
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [generateSuccess, setGenerateSuccess] = useState<string | null>(null);
 
+  // Regulatory Sources state
+  const [sources, setSources] = useState<TrustedSource[]>([]);
+  const [showAddSource, setShowAddSource] = useState(false);
+  const [editingSource, setEditingSource] = useState<string | null>(null);
+  const [crawlingSource, setCrawlingSource] = useState<string | null>(null);
+  const [sourceForm, setSourceForm] = useState<SourceForm>({
+    name: '', base_url: '', region: 'Global', framework_type: 'General',
+    crawl_frequency_days: '30', crawl_limit: '50',
+  });
+  const [sourceMsg, setSourceMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
   // Chat state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
@@ -199,12 +234,14 @@ export default function App() {
       const p2 = fetch(`${API_URL}/masters`).then(r => r.json());
       const p3 = fetch(`${API_URL}/transactions?ts=${Date.now()}`, { cache: 'no-store' }).then(r => r.json());
       const p4 = fetch(`${API_URL}/policies/documents`).then(r => r.json());
+      const p5 = fetch(`${API_URL}/sources`).then(r => r.json());
 
-      const [dataKpi, dataMasters, dataTrans, dataDocs] = await Promise.all([p1, p2, p3, p4]);
+      const [dataKpi, dataMasters, dataTrans, dataDocs, dataSources] = await Promise.all([p1, p2, p3, p4, p5]);
       setKpis(dataKpi);
       setMasters(dataMasters);
       setTransactions(dataTrans);
       if (Array.isArray(dataDocs)) setPolicyDocs(dataDocs);
+      if (Array.isArray(dataSources)) setSources(dataSources);
     } catch (err) {
       console.warn("Backend not running yet or unreachable");
     }
@@ -337,6 +374,83 @@ export default function App() {
     } finally {
       setIsGeneratingPolicy(false);
     }
+  };
+
+  // -------------------------------------------------------------------------
+  // Regulatory Sources
+  // -------------------------------------------------------------------------
+
+  const fetchSources = async () => {
+    try {
+      const data = await fetch(`${API_URL}/sources`).then(r => r.json());
+      if (Array.isArray(data)) setSources(data);
+    } catch { /* ignore */ }
+  };
+
+  const saveSource = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setSourceMsg(null);
+    const body = {
+      name: sourceForm.name,
+      base_url: sourceForm.base_url,
+      region: sourceForm.region,
+      framework_type: sourceForm.framework_type,
+      crawl_frequency_days: parseInt(sourceForm.crawl_frequency_days) || 30,
+      crawl_limit: parseInt(sourceForm.crawl_limit) || 50,
+    };
+    try {
+      let res;
+      if (editingSource) {
+        res = await fetch(`${API_URL}/sources/${editingSource}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        });
+      } else {
+        res = await fetch(`${API_URL}/sources`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        });
+      }
+      const data = await res.json();
+      if (!res.ok) { setSourceMsg({ type: 'err', text: data.error || 'Failed' }); return; }
+      setSourceMsg({ type: 'ok', text: editingSource ? 'Source updated.' : `Source "${data.name}" added.` });
+      setShowAddSource(false);
+      setEditingSource(null);
+      setSourceForm({ name: '', base_url: '', region: 'Global', framework_type: 'General', crawl_frequency_days: '30', crawl_limit: '50' });
+      await fetchSources();
+      await fetchData();
+    } catch { setSourceMsg({ type: 'err', text: 'Connection error' }); }
+  };
+
+  const deleteSource = async (sourceId: string) => {
+    try {
+      await fetch(`${API_URL}/sources/${sourceId}`, { method: 'DELETE' });
+      await fetchSources();
+      await fetchData();
+    } catch { /* ignore */ }
+  };
+
+  const triggerCrawl = async (sourceId: string) => {
+    setCrawlingSource(sourceId);
+    setSourceMsg(null);
+    try {
+      const res = await fetch(`${API_URL}/sources/${sourceId}/crawl`, { method: 'POST' });
+      const data = await res.json();
+      setSourceMsg({ type: res.ok ? 'ok' : 'err', text: data.message || data.error || '' });
+      setTimeout(async () => { await fetchSources(); setCrawlingSource(null); }, 3000);
+    } catch {
+      setSourceMsg({ type: 'err', text: 'Crawl request failed' });
+      setCrawlingSource(null);
+    }
+  };
+
+  const startEditSource = (s: TrustedSource) => {
+    setSourceForm({
+      name: s.name, base_url: s.base_url, region: s.region,
+      framework_type: s.framework_type,
+      crawl_frequency_days: String(s.crawl_frequency_days),
+      crawl_limit: String(s.crawl_limit),
+    });
+    setEditingSource(s.source_id);
+    setShowAddSource(true);
   };
 
   // -------------------------------------------------------------------------
@@ -625,6 +739,9 @@ export default function App() {
           <button onClick={() => setActiveTab('reports')} className={`nav-item ${activeTab === 'reports' ? 'active' : ''}`}>
             <FileBarChart size={16} className={activeTab==='reports'? 'text-blue-400' : 'opacity-70'}/> Advanced Reports
           </button>
+          <button onClick={() => setActiveTab('sources')} className={`nav-item ${activeTab === 'sources' ? 'active' : ''}`}>
+            <Globe size={16} className={activeTab==='sources'? 'text-blue-400' : 'opacity-70'}/> Regulatory Sources
+          </button>
           <button onClick={() => setActiveTab('chat')} className={`nav-item ${activeTab === 'chat' ? 'active' : ''}`}>
             <MessageSquare size={16} className={activeTab==='chat'? 'text-blue-400' : 'opacity-70'}/> AI Policy Chat
           </button>
@@ -662,7 +779,7 @@ export default function App() {
                 {[
                   { title: 'Policies Active', value: kpis.active_policies, color: 'text-slate-800', icon: Database, bg: 'bg-slate-100' },
                   { title: 'Compliance Rate', value: `${kpis.compliance_pct}%`, color: 'text-emerald-600', icon: CheckCircle, bg: 'bg-emerald-50' },
-                  { title: 'Citizen Trust', value: `${kpis.citizen_satisfaction}%`, color: 'text-blue-600', icon: ShieldCheck, bg: 'bg-blue-50' },
+                  { title: 'Regulatory Sources', value: kpis.crawled_sources, color: 'text-blue-600', icon: ShieldCheck, bg: 'bg-blue-50' },
                   { title: 'Aggregate Risk', value: `${kpis.risk_index} / 100`, color: 'text-rose-600', icon: AlertTriangle, bg: 'bg-rose-50' },
                 ].map((k, i) => (
                   <div key={i} className="enterprise-panel flex items-center gap-4 group">
@@ -1429,6 +1546,200 @@ export default function App() {
                     )}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {/* --- REGULATORY SOURCES VIEW --- */}
+          {activeTab === 'sources' && (
+            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-6">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-3xl font-bold text-slate-800 tracking-tight">Regulatory Sources</h2>
+                  <p className="text-sm text-slate-500 mt-1">
+                    Manage trusted compliance sites. Firecrawl ingests their content into ChromaDB for RAG retrieval.
+                    Only changed pages (SHA-256 diff) are re-indexed.
+                  </p>
+                </div>
+                <button
+                  onClick={() => { setShowAddSource(s => !s); setEditingSource(null); setSourceForm({ name: '', base_url: '', region: 'Global', framework_type: 'General', crawl_frequency_days: '30', crawl_limit: '50' }); }}
+                  className="btn-primary flex items-center gap-2 shrink-0"
+                >
+                  <Plus size={15} /> Add Source
+                </button>
+              </div>
+
+              {/* Status message */}
+              {sourceMsg && (
+                <div className={`flex items-center gap-2 text-sm px-4 py-2 rounded-lg border ${sourceMsg.type === 'ok' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                  {sourceMsg.type === 'ok' ? <CheckCircle size={14} /> : <XCircle size={14} />}
+                  {sourceMsg.text}
+                </div>
+              )}
+
+              {/* Add / Edit form */}
+              {showAddSource && (
+                <div className="enterprise-panel border-t-4 border-t-blue-500 animate-in slide-in-from-top-2 duration-200">
+                  <h3 className="font-bold text-slate-800 mb-4">{editingSource ? 'Edit Source' : 'Add Trusted Regulatory Source'}</h3>
+                  <form onSubmit={saveSource} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Source Name *</label>
+                        <input className="input" placeholder="e.g. EU AI Act Portal" value={sourceForm.name}
+                          onChange={e => setSourceForm({ ...sourceForm, name: e.target.value })} required />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Base URL *</label>
+                        <input className="input" placeholder="https://eur-lex.europa.eu/..." value={sourceForm.base_url}
+                          onChange={e => setSourceForm({ ...sourceForm, base_url: e.target.value })} required type="url" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Region</label>
+                        <input className="input" list="src-regions" placeholder="e.g. EU"
+                          value={sourceForm.region} onChange={e => setSourceForm({ ...sourceForm, region: e.target.value })} />
+                        <datalist id="src-regions">
+                          <option value="Global" /><option value="EU" /><option value="US" />
+                          <option value="UK" /><option value="India" /><option value="APAC" />
+                          <option value="Australia" /><option value="Canada" />
+                        </datalist>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Framework Type</label>
+                        <input className="input" list="src-frameworks" placeholder="e.g. GDPR"
+                          value={sourceForm.framework_type} onChange={e => setSourceForm({ ...sourceForm, framework_type: e.target.value })} />
+                        <datalist id="src-frameworks">
+                          <option value="General" /><option value="GDPR" /><option value="ISO_27001" />
+                          <option value="NIST_AI_RMF" /><option value="OECD_AI" /><option value="PCI_DSS" />
+                          <option value="HIPAA" /><option value="SOC2" /><option value="EU AI Act" />
+                          <option value="FCA" /><option value="RBI" /><option value="SEBI" />
+                        </datalist>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Crawl Every (days)</label>
+                        <input className="input" list="src-freq" placeholder="30"
+                          value={sourceForm.crawl_frequency_days} onChange={e => setSourceForm({ ...sourceForm, crawl_frequency_days: e.target.value })} />
+                        <datalist id="src-freq">
+                          <option value="7" /><option value="14" /><option value="30" />
+                          <option value="60" /><option value="90" />
+                        </datalist>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Page Limit</label>
+                        <input className="input" list="src-limit" placeholder="50"
+                          value={sourceForm.crawl_limit} onChange={e => setSourceForm({ ...sourceForm, crawl_limit: e.target.value })} />
+                        <datalist id="src-limit">
+                          <option value="10" /><option value="25" /><option value="50" />
+                          <option value="100" /><option value="200" />
+                        </datalist>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 justify-end pt-2">
+                      <button type="button" onClick={() => setShowAddSource(false)}
+                        className="px-4 py-2 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
+                        Cancel
+                      </button>
+                      <button type="submit" className="btn-primary">
+                        {editingSource ? 'Save Changes' : 'Add Source'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {/* Sources table */}
+              {sources.length === 0 ? (
+                <div className="enterprise-panel flex flex-col items-center justify-center py-16 border-dashed border-2 bg-slate-50/50 text-center">
+                  <Globe size={36} className="text-slate-300 mb-3" />
+                  <p className="font-semibold text-slate-500">No regulatory sources added yet.</p>
+                  <p className="text-xs text-slate-400 mt-1 max-w-sm">
+                    Add trusted compliance portals (e.g. EUR-Lex, NIST, RBI) and Firecrawl will ingest their content into your RAG knowledge base.
+                  </p>
+                </div>
+              ) : (
+                <div className="enterprise-panel p-0 overflow-hidden shadow-md">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-slate-50 border-b border-panelBorder">
+                      <tr>
+                        <th className="p-4 text-[11px] uppercase tracking-widest font-bold text-slate-500">Source</th>
+                        <th className="p-4 text-[11px] uppercase tracking-widest font-bold text-slate-500">Region</th>
+                        <th className="p-4 text-[11px] uppercase tracking-widest font-bold text-slate-500">Framework</th>
+                        <th className="p-4 text-[11px] uppercase tracking-widest font-bold text-slate-500 text-center">Pages</th>
+                        <th className="p-4 text-[11px] uppercase tracking-widest font-bold text-slate-500 text-center">Freq.</th>
+                        <th className="p-4 text-[11px] uppercase tracking-widest font-bold text-slate-500">Last Crawled</th>
+                        <th className="p-4 text-[11px] uppercase tracking-widest font-bold text-slate-500 text-center">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-sm">
+                      {sources.map(s => (
+                        <tr key={s.source_id} className="border-b last:border-b-0 hover:bg-blue-50/20 transition-colors">
+                          <td className="p-4">
+                            <div className="font-semibold text-slate-800">{s.name}</div>
+                            <a href={s.base_url} target="_blank" rel="noopener noreferrer"
+                              className="text-[11px] text-blue-500 hover:underline flex items-center gap-1 mt-0.5">
+                              <ExternalLink size={10} />{s.base_url.length > 45 ? s.base_url.slice(0, 45) + '…' : s.base_url}
+                            </a>
+                          </td>
+                          <td className="p-4">
+                            <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-xs font-semibold">{s.region}</span>
+                          </td>
+                          <td className="p-4">
+                            <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-semibold">{s.framework_type}</span>
+                          </td>
+                          <td className="p-4 text-center">
+                            <span className="bg-indigo-50 text-indigo-700 text-xs font-bold px-2 py-1 rounded">{s.page_count ?? 0}</span>
+                          </td>
+                          <td className="p-4 text-center text-xs text-slate-500">{s.crawl_frequency_days}d</td>
+                          <td className="p-4">
+                            {s.last_crawled ? (
+                              <div>
+                                <div className="text-xs text-slate-600">{new Date(s.last_crawled).toLocaleDateString()}</div>
+                                {s.last_crawl_summary && (
+                                  <div className="text-[10px] text-slate-400">
+                                    {s.last_crawl_summary.pages_updated} updated · {s.last_crawl_summary.pages_unchanged} unchanged
+                                  </div>
+                                )}
+                                {s.last_error && <div className="text-[10px] text-red-500 truncate max-w-[160px]" title={s.last_error}>⚠ {s.last_error.slice(0, 50)}</div>}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-400 italic">Never crawled</span>
+                            )}
+                          </td>
+                          <td className="p-4">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => triggerCrawl(s.source_id)}
+                                disabled={crawlingSource === s.source_id}
+                                title="Crawl now"
+                                className="p-1.5 rounded hover:bg-blue-50 text-blue-500 hover:text-blue-700 transition-colors disabled:opacity-40"
+                              >
+                                <RefreshCw size={14} className={crawlingSource === s.source_id ? 'animate-spin' : ''} />
+                              </button>
+                              <button onClick={() => startEditSource(s)} title="Edit" className="p-1.5 rounded hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors">
+                                <Pencil size={14} />
+                              </button>
+                              <button onClick={() => deleteSource(s.source_id)} title="Delete" className="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors">
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Architecture note */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-500 flex gap-3">
+                <Info size={14} className="shrink-0 mt-0.5 text-blue-400" />
+                <span>
+                  Crawled content is stored in MongoDB and embedded into ChromaDB with <code className="bg-slate-200 px-1 rounded">source_type=crawled</code>.
+                  It participates in all RAG queries alongside uploaded and generated policies.
+                  Only pages whose SHA-256 hash changes between crawls are re-indexed.
+                  The background scheduler checks for due sources hourly.
+                </span>
               </div>
             </div>
           )}

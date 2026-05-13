@@ -1,0 +1,10 @@
+{
+    "event_id": "e5f3efa8-79f7-428e-a02f-f20547b2ef3c",
+    "governance_summary": "Event e5f3efa8-79f7-428e-a02f-f20547b2ef3c - Risk: Medium, Compliance: OK",
+    "final_action": "Auto Blocked",
+    "audit_trace": [
+        "Policy Output: Conflict=False",
+        "Compliance Output: Auth=False",
+        "Decision Engine: Compliance evaluation indicates the employee with clearance level_1 is not authorized to initiate a $2000 financial transaction, violating ISO_27001 access control and privileged access controls. Despite no policy conflict and only a medium risk score, the lack of authorization mandates an automatic block."
+    ]
+}

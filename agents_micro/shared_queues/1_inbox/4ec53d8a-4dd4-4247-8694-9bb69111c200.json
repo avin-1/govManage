@@ -1,0 +1,9 @@
+{
+    "event_id": "4ec53d8a-4dd4-4247-8694-9bb69111c200",
+    "event_type": "financial_txn",
+    "payload": {
+        "user_id": "POL-AI-001",
+        "amount": 200000.0,
+        "description": "Paid to Passioninfotech for industry project"
+    }
+}

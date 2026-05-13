@@ -1,0 +1,10 @@
+{
+    "event_id": "407da232-fa7c-4c59-8502-703bcd2e0432",
+    "governance_summary": "Event 407da232-fa7c-4c59-8502-703bcd2e0432 - Risk: High, Compliance: OK",
+    "final_action": "Auto Blocked",
+    "audit_trace": [
+        "Policy Output: Conflict=True",
+        "Compliance Output: Auth=False",
+        "Decision Engine: The compliance evaluation indicates the user is not authorized due to insufficient role and clearance for a high-value financial transaction. Additionally, the policy analyst flagged a conflict and the risk assessment assigned a High risk level with a TVI score of 0.733. Because authorization is false, the system must block the event automatically."
+    ]
+}

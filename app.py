@@ -32,11 +32,12 @@ load_dotenv()
 
 try:
     from langchain_groq import ChatGroq
-    from langchain_core.messages import HumanMessage, SystemMessage
+    from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 except Exception:
     ChatGroq = None
     HumanMessage = None
     SystemMessage = None
+    AIMessage = None
 
 
 app = Flask(__name__)
@@ -1370,6 +1371,538 @@ def list_source_pages(source_id: str):
 
 
 # ---------------------------------------------------------------------------
+# Risk Library
+# ---------------------------------------------------------------------------
+
+@app.route("/api/risk/library", methods=["GET"])
+def get_risk_library():
+    """Return all risk library items with full details."""
+    risks = db.list_risk_library()
+    return jsonify(risks)
+
+
+# ---------------------------------------------------------------------------
+# Policy Packs — Full 3-Agent Generation
+# ---------------------------------------------------------------------------
+
+@app.route("/api/policies/suggest-context", methods=["POST"])
+def suggest_context():
+    """
+    Suggest relevant compliance frameworks and risk factors based on a topic.
+    """
+    if not ChatGroq:
+        return jsonify({"error": "LLM not available"}), 503
+
+    body = request.get_json(silent=True) or {}
+    topic = (body.get("topic") or "").strip()
+    sector = (body.get("sector") or "General").strip()
+
+    if not topic:
+        return jsonify({"error": "topic is required"}), 400
+
+    # Get available frameworks and risks to show the LLM
+    frameworks = db.list_frameworks()
+    risks = db.list_risk_library()
+    
+    fw_info = ", ".join([f"{f['framework_id']} ({f['name']})" for f in frameworks])
+    risk_info = ", ".join([f"{r['risk_id']} ({r['title']})" for r in risks])
+
+    prompt = f"""
+    You are an expert Governance, Risk, and Compliance (GRC) AI.
+    Analyze the following policy topic and sector.
+    Topic: {topic}
+    Sector: {sector}
+
+    Available Compliance Frameworks: {fw_info}
+    Available Risk Factors: {risk_info}
+
+    Select the most relevant 2-4 framework IDs and 3-5 risk IDs from the available lists.
+    Return a strictly valid JSON object matching this exact structure:
+    {{
+      "suggested_frameworks": ["ID1", "ID2"],
+      "suggested_risks": ["ID1", "ID2"]
+    }}
+    Do not output any other text or markdown block formatting around the JSON.
+    """
+
+    try:
+        model_name = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        llm = ChatGroq(model=model_name, temperature=0.1)
+        response = llm.invoke(prompt).content.strip()
+        # Clean up markdown if present
+        if response.startswith("```json"):
+            response = response[7:]
+        if response.startswith("```"):
+            response = response[3:]
+        if response.endswith("```"):
+            response = response[:-3]
+        
+        suggestions = json.loads(response.strip())
+        return jsonify(suggestions)
+    except Exception as e:
+        print(f"[suggest_context] Error: {e}")
+        # Return sensible defaults if LLM parsing fails
+        return jsonify({
+            "suggested_frameworks": ["ISO_27001", "GDPR"] if "data" in topic.lower() or "privacy" in topic.lower() else ["ISO_27001", "NIST_AI_RMF"],
+            "suggested_risks": ["RISK-001", "RISK-004", "RISK-006"]
+        })
+
+@app.route("/api/policies/generate-pack", methods=["POST"])
+def generate_policy_pack():
+    """
+    Generate a complete Policy Pack using 3-agent logic:
+    Agent 1: Policy Repo — checks existing policies
+    Agent 2: Compliance — maps selected frameworks + controls
+    Agent 3: Risk Engine — maps selected risks + mitigations
+
+    Body: {
+      topic, sector, country (optional), risk_level,
+      selected_compliances: [framework_id, ...],
+      selected_risks: [risk_id, ...],
+      mode: "selective" | "auto" | "hybrid"
+    }
+    """
+    if not ChatGroq:
+        return jsonify({"error": "LLM not available — check GROQ_API_KEY"}), 503
+
+    body = request.get_json(silent=True) or {}
+    topic = (body.get("topic") or "").strip()
+    sector = (body.get("sector") or "General").strip()
+    country = (body.get("country") or "").strip()
+    risk_level = (body.get("risk_level") or "High").strip()
+    selected_compliance_ids: List[str] = body.get("selected_compliances", [])
+    selected_risk_ids: List[str] = body.get("selected_risks", [])
+    custom_compliances: List[str] = body.get("custom_compliances", [])
+    custom_risks: List[str] = body.get("custom_risks", [])
+    mode = (body.get("mode") or "hybrid").strip().lower()
+
+    if not topic:
+        return jsonify({"error": "topic is required"}), 400
+
+    # ─── Agent 1: Policy Repository ───────────────────────────────────────
+    existing_docs = db.list_policy_documents(active_only=True)
+    existing_names = [d.get("name", "") for d in existing_docs[:5]]
+    existing_context = (
+        f"Existing policies in repository: {', '.join(existing_names)}"
+        if existing_names else "No existing policies in repository."
+    )
+
+    # ─── Agent 2: Compliance Selector ─────────────────────────────────────
+    # In hybrid/auto mode, auto-augment with critical missing frameworks
+    if mode in {"auto", "hybrid"} and not selected_compliance_ids:
+        selected_compliance_ids = ["ISO_27001", "NIST_AI_RMF", "OECD_AI", "GDPR"]
+    elif mode == "hybrid" and selected_compliance_ids:
+        # Add critical missing frameworks if not already selected
+        critical = ["ISO_27001", "NIST_AI_RMF"]
+        for c in critical:
+            if c not in selected_compliance_ids:
+                selected_compliance_ids.append(c)
+
+    compliance_data = []
+    for fw_id in selected_compliance_ids:
+        fw = db.get_framework(fw_id)
+        if fw:
+            compliance_data.append(fw)
+
+    # Build compliance context
+    compliance_text_parts = []
+    control_matrix_items = []
+    for fw in compliance_data:
+        controls = fw.get("controls", [])[:6]
+        ctrl_titles = [f"{c['control_id']}: {c['title']}" for c in controls]
+        compliance_text_parts.append(
+            f"Framework: {fw['name']} ({fw.get('region', 'Global')})\n"
+            f"Key Controls: {'; '.join(ctrl_titles)}"
+        )
+        for c in controls:
+            control_matrix_items.append({
+                "framework": fw["name"],
+                "framework_id": fw["framework_id"],
+                "control_id": c["control_id"],
+                "title": c["title"],
+                "severity": c.get("severity", "medium"),
+                "coverage": "Addressed in Policy"
+            })
+
+    compliance_context = "\n\n".join(compliance_text_parts)
+    if custom_compliances:
+        compliance_context += "\n\nCustom/User-Defined Frameworks to Address:\n" + "\n".join([f"- {c}" for c in custom_compliances])
+        for c in custom_compliances:
+            control_matrix_items.append({
+                "framework": c,
+                "framework_id": c.replace(" ", "_").upper()[:10],
+                "control_id": "CUSTOM-01",
+                "title": c,
+                "severity": "high",
+                "coverage": "Addressed in Policy"
+            })
+
+    # ─── Agent 3: Risk Engine ──────────────────────────────────────────────
+    if mode in {"auto", "hybrid"} and not selected_risk_ids:
+        selected_risk_ids = ["RISK-001", "RISK-002", "RISK-003", "RISK-006", "RISK-009"]
+    elif mode == "hybrid" and selected_risk_ids:
+        # Auto-augment critical risks
+        critical_risks = ["RISK-001", "RISK-002"]
+        for r in critical_risks:
+            if r not in selected_risk_ids:
+                selected_risk_ids.append(r)
+
+    risk_items = db.get_risk_library_items_by_ids(selected_risk_ids)
+    risk_text_parts = []
+    risk_mapping_items = []
+    for r in risk_items:
+        risk_text_parts.append(
+            f"[{r['risk_id']}] {r['title']} (Severity: {r['severity']})\n"
+            f"Description: {r['description']}\n"
+            f"Mitigation: {r['mitigation']}"
+        )
+        risk_mapping_items.append({
+            "risk_id": r["risk_id"],
+            "risk_type": r["risk_type"],
+            "title": r["title"],
+            "severity": r["severity"],
+            "mitigation": r["mitigation"],
+            "category": r.get("category", "")
+        })
+
+    risk_context = "\n\n".join(risk_text_parts)
+    if custom_risks:
+        risk_context += "\n\nCustom/User-Defined Risks to Mitigate:\n" + "\n".join([f"- {r}" for r in custom_risks])
+        for r in custom_risks:
+            risk_mapping_items.append({
+                "risk_id": f"CUSTOM-{len(risk_mapping_items)+1}",
+                "risk_type": r,
+                "title": r,
+                "severity": "High",
+                "mitigation": "Custom mitigation required",
+                "category": "User Defined"
+            })
+    country_context = f"Country/Region: {country}\n" if country else ""
+
+    # ─── LLM Policy Generation ────────────────────────────────────────────
+    prompt = f"""You are an expert governance policy writer and GRC specialist.
+
+{existing_context}
+
+{country_context}Generate a complete, professional governance policy pack on:
+Topic: {topic}
+Sector: {sector}
+Risk Level: {risk_level}
+
+COMPLIANCE FRAMEWORKS TO ADDRESS:
+{compliance_context}
+
+RISKS TO MITIGATE:
+{risk_context}
+
+Return ONLY valid JSON with exactly this structure:
+{{
+  "name": "<concise policy title>",
+  "policy_id": "<GEN-{sector[:3].upper()}-001>",
+  "objective": "<2-3 sentences — why this policy exists and what it achieves>",
+  "scope": "<who and what systems/processes this applies to>",
+  "policy_statements": ["<statement 1>", "<statement 2>", "<statement 3>", "<statement 4>", "<statement 5>"],
+  "procedures": [
+    {{"title": "<procedure name>", "steps": ["<step 1>", "<step 2>", "<step 3>"]}}
+  ],
+  "governance_structure": [
+    {{"role": "<role name>", "responsibility": "<key responsibility>"}}
+  ],
+  "enforcement": "<consequences for non-compliance and violation handling>",
+  "review_cycle": "<how often this policy is reviewed>",
+  "compliance_scores": {{
+    "compliance_readiness": <0-100>,
+    "risk_coverage": <0-100>,
+    "policy_completeness": <0-100>
+  }}
+}}
+
+Include at least 5 policy_statements, 3 procedures (each with 3-4 steps), and 4 governance roles. Be specific and enforceable."""
+
+    try:
+        model_name = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        llm = ChatGroq(model_name=model_name)
+        response = llm.invoke([
+            SystemMessage(content="You are a strict JSON-only API. Output only valid JSON, no markdown, no explanation."),
+            HumanMessage(content=prompt),
+        ])
+        content = response.content.strip()
+        if content.startswith("```"):
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+            content = content.strip()
+        policy_json = json.loads(content)
+    except Exception as e:
+        return jsonify({"error": f"LLM generation failed: {e}"}), 500
+
+    # ─── Build & Store Policy Pack ─────────────────────────────────────────
+    pack_id = f"PACK-{uuid.uuid4().hex[:10].upper()}"
+    now = datetime.now(timezone.utc).isoformat()
+
+    full_text_lines = [
+        f"POLICY PACK: {policy_json.get('name', topic)}",
+        f"ID: {pack_id} | Sector: {sector} | Risk Level: {risk_level}",
+        f"Generated: {now}",
+        "",
+        f"OBJECTIVE\n{policy_json.get('objective', '')}",
+        "",
+        f"SCOPE\n{policy_json.get('scope', '')}",
+        "",
+        "POLICY STATEMENTS",
+    ]
+    for i, stmt in enumerate(policy_json.get("policy_statements", []), 1):
+        full_text_lines.append(f"  {i}. {stmt}")
+    full_text_lines += ["", "RISK MITIGATION MAPPING"]
+    for r in risk_mapping_items:
+        full_text_lines.append(f"  [{r['risk_id']}] {r['title']}: {r['mitigation']}")
+    full_text_lines += ["", "COMPLIANCE FRAMEWORK COVERAGE"]
+    for fw in compliance_data:
+        full_text_lines.append(f"  {fw['name']} — {len(fw.get('controls', []))} controls addressed")
+
+    full_text = "\n".join(full_text_lines)
+
+    # Index into ChromaDB
+    from file_parser import chunk_text
+    chunks = chunk_text(full_text)
+    chroma_status = "disabled"
+    if _chroma_ok:
+        try:
+            from vector_store import upsert_chunks
+            n = upsert_chunks(
+                document_id=pack_id,
+                chunks=chunks,
+                metadata={"name": policy_json.get("name", topic), "sector": sector, "framework": "multi"},
+            )
+            chroma_status = f"indexed ({n} chunks)"
+        except Exception as ce:
+            chroma_status = f"error: {ce}"
+
+    pack_doc = {
+        "pack_id": pack_id,
+        "name": policy_json.get("name", topic),
+        "topic": topic,
+        "sector": sector,
+        "country": country,
+        "risk_level": risk_level,
+        "mode": mode,
+        "selected_compliance_ids": selected_compliance_ids,
+        "selected_risk_ids": selected_risk_ids,
+        "policy": policy_json,
+        "risk_mapping": risk_mapping_items,
+        "compliance_matrix": control_matrix_items,
+        "compliance_frameworks": [{"id": fw["framework_id"], "name": fw["name"], "trusted_url": fw.get("trusted_url", ""), "region": fw.get("region", "Global"), "category": fw.get("category", "")} for fw in compliance_data],
+        "full_policy_text": full_text,
+        "chunk_count": len(chunks),
+        "chroma_status": chroma_status,
+        "created_at": now,
+        "is_active": True,
+    }
+
+    db.add_policy_pack(pack_doc)
+    pack_doc.pop("full_policy_text", None)
+
+    print(f"[generate-pack] {pack_id} | mode={mode} | compliances={selected_compliance_ids} | risks={selected_risk_ids}")
+    return jsonify(pack_doc), 201
+
+
+@app.route("/api/policy-packs", methods=["GET"])
+def list_policy_packs():
+    """List all generated policy packs."""
+    packs = db.list_policy_packs()
+    return jsonify(packs)
+
+
+@app.route("/api/policy-packs/<pack_id>", methods=["GET"])
+def get_policy_pack(pack_id: str):
+    """Get a specific policy pack with full details."""
+    pack = db.get_policy_pack(pack_id)
+    if not pack:
+        return jsonify({"error": "Policy pack not found"}), 404
+    return jsonify(pack)
+
+
+@app.route("/api/policy-packs/<pack_id>", methods=["DELETE"])
+def delete_policy_pack(pack_id: str):
+    """Delete a policy pack."""
+    pack = db.get_policy_pack(pack_id)
+    if not pack:
+        return jsonify({"error": "Policy pack not found"}), 404
+    if _chroma_ok:
+        try:
+            from vector_store import delete_document_chunks
+            delete_document_chunks(pack_id)
+        except Exception:
+            pass
+    db.delete_policy_pack(pack_id)
+    return jsonify({"status": "deleted", "pack_id": pack_id})
+
+
+# ---------------------------------------------------------------------------
+# Compliance & Risk Reports
+# ---------------------------------------------------------------------------
+
+@app.route("/api/reports/compliance", methods=["POST"])
+def generate_compliance_report():
+    """
+    Generate a detailed compliance report for a policy or pack.
+    Body: { framework_ids: [str], pack_id or document_id: str }
+    """
+    if not ChatGroq:
+        return jsonify({"error": "LLM not available"}), 503
+
+    body = request.get_json(silent=True) or {}
+    framework_ids = body.get("framework_ids", ["ISO_27001"])
+    pack_id = body.get("pack_id")
+    document_id = body.get("document_id")
+    organization = body.get("organization", "Organization")
+    sector = body.get("sector", "General")
+
+    # Get policy context
+    policy_context = ""
+    if pack_id:
+        pack = db.get_policy_pack(pack_id)
+        if pack:
+            policy_context = f"Policy Pack: {pack.get('name')}\nSector: {pack.get('sector')}\nRisk Level: {pack.get('risk_level')}"
+    elif document_id:
+        doc = db.get_policy_document(document_id)
+        if doc:
+            policy_context = f"Policy Document: {doc.get('name')}\nSector: {doc.get('sector')}"
+
+    # Get framework details
+    frameworks_text = []
+    all_controls = []
+    for fw_id in framework_ids:
+        fw = db.get_framework(fw_id)
+        if fw:
+            frameworks_text.append(f"{fw['name']} — {len(fw.get('controls', []))} controls")
+            all_controls.extend(fw.get("controls", [])[:5])
+
+    prompt = f"""You are a senior GRC compliance analyst. Generate a detailed compliance assessment report.
+
+Organization: {organization}
+Sector: {sector}
+{policy_context}
+
+Frameworks assessed: {', '.join(frameworks_text)}
+
+Return ONLY valid JSON:
+{{
+  "report_title": "<title>",
+  "executive_summary": "<2-3 paragraph executive summary>",
+  "compliance_scores": {{
+    "overall": <0-100>,
+    "by_framework": [{{"framework": "<name>", "score": <0-100>, "status": "<Compliant|Partial|Non-Compliant>"}}]
+  }},
+  "key_findings": ["<finding 1>", "<finding 2>", "<finding 3>", "<finding 4>", "<finding 5>"],
+  "critical_gaps": ["<gap 1>", "<gap 2>", "<gap 3>"],
+  "recommendations": ["<recommendation 1>", "<recommendation 2>", "<recommendation 3>", "<recommendation 4>"],
+  "action_plan": [
+    {{"priority": "High", "action": "<action>", "timeline": "<timeline>", "owner": "<role>"}}
+  ],
+  "maturity_level": "<Initial|Developing|Defined|Managed|Optimizing>",
+  "next_review_date": "<suggested date>"
+}}"""
+
+    try:
+        model_name = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        llm = ChatGroq(model_name=model_name)
+        response = llm.invoke([
+            SystemMessage(content="You are a strict JSON-only API. Output only valid JSON, no markdown, no explanation."),
+            HumanMessage(content=prompt),
+        ])
+        content = response.content.strip()
+        if content.startswith("```"):
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+            content = content.strip()
+        report_json = json.loads(content)
+    except Exception as e:
+        return jsonify({"error": f"Report generation failed: {e}"}), 500
+
+    report_json["generated_at"] = datetime.now(timezone.utc).isoformat()
+    report_json["framework_ids"] = framework_ids
+    return jsonify(report_json)
+
+
+@app.route("/api/reports/risk", methods=["POST"])
+def generate_risk_report():
+    """
+    Generate a risk assessment report for selected risk items.
+    Body: { risk_ids: [str], pack_id: str (optional), sector: str }
+    """
+    if not ChatGroq:
+        return jsonify({"error": "LLM not available"}), 503
+
+    body = request.get_json(silent=True) or {}
+    risk_ids = body.get("risk_ids", [])
+    sector = body.get("sector", "General")
+    country = body.get("country", "")
+    organization = body.get("organization", "Organization")
+
+    if not risk_ids:
+        risk_ids = [r["risk_id"] for r in db.list_risk_library()]
+
+    risks = db.get_risk_library_items_by_ids(risk_ids)
+    risk_summary = "\n".join([
+        f"[{r['risk_id']}] {r['title']} | Severity: {r['severity']} | Type: {r['risk_type']} | Mitigation: {r['mitigation']}"
+        for r in risks
+    ])
+
+    country_ctx = f"Country context: {country}\n" if country else ""
+
+    prompt = f"""You are a senior risk management expert. Generate a comprehensive risk assessment report.
+
+Organization: {organization}
+Sector: {sector}
+{country_ctx}
+
+Risk Items Assessed:
+{risk_summary}
+
+Return ONLY valid JSON:
+{{
+  "report_title": "<title>",
+  "executive_summary": "<2-3 paragraph executive summary of risk posture>",
+  "risk_posture": "<Overall risk posture: Critical|High|Medium|Low>",
+  "overall_risk_score": <0-100>,
+  "key_findings": ["<finding 1>", "<finding 2>", "<finding 3>", "<finding 4>"],
+  "high_priority_risks": ["<risk title 1>", "<risk title 2>", "<risk title 3>"],
+  "risk_treatment_plan": [
+    {{"risk_id": "<id>", "risk": "<title>", "treatment": "Accept|Mitigate|Transfer|Avoid", "action": "<specific action>", "timeline": "<timeline>"}}
+  ],
+  "residual_risks": ["<residual risk 1>", "<residual risk 2>"],
+  "recommendations": ["<recommendation 1>", "<recommendation 2>", "<recommendation 3>"],
+  "governance_actions": [
+    {{"action": "<action>", "owner": "<role>", "due_date": "<timeline>"}}
+  ]
+}}"""
+
+    try:
+        model_name = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        llm = ChatGroq(model_name=model_name)
+        response = llm.invoke([
+            SystemMessage(content="You are a strict JSON-only API. Output only valid JSON, no markdown, no explanation."),
+            HumanMessage(content=prompt),
+        ])
+        content = response.content.strip()
+        if content.startswith("```"):
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+            content = content.strip()
+        report_json = json.loads(content)
+    except Exception as e:
+        return jsonify({"error": f"Risk report generation failed: {e}"}), 500
+
+    report_json["generated_at"] = datetime.now(timezone.utc).isoformat()
+    report_json["risk_ids_assessed"] = risk_ids
+    report_json["risk_items"] = risks
+    return jsonify(report_json)
+
+
+# ---------------------------------------------------------------------------
 # Background scheduler — checks for due sources every hour
 # ---------------------------------------------------------------------------
 
@@ -1390,6 +1923,61 @@ _sched_thread = threading.Thread(target=_scheduler_loop, daemon=True)
 _sched_thread.start()
 
 
+@app.route("/api/chat/reporting", methods=["POST"])
+def chat_reporting():
+    """
+    Handle chat interactions for Compliance and Risk reporting.
+    Takes policy text, a user prompt, and chat history.
+    """
+    if not ChatGroq:
+        return jsonify({"error": "LLM not available"}), 503
+        
+    body = request.get_json(silent=True) or {}
+    message = body.get("message", "").strip()
+    policy_text = body.get("policy_text", "").strip()
+    history = body.get("history", [])
+    report_type = body.get("report_type", "compliance").strip().lower()
+    
+    if not message:
+        return jsonify({"error": "Message is required"}), 400
+        
+    if report_type == "compliance":
+        system_role = "You are an expert Compliance Auditor and GRC specialist."
+    elif report_type == "risk":
+        system_role = "You are an expert Risk Analyst and GRC specialist."
+    else:
+        system_role = "You are an expert AI Governance Advisor with deep knowledge of global compliance frameworks (ISO 27001, GDPR, NIST AI RMF, SOC2, HIPAA, OECD AI Principles), policy drafting, and enterprise risk management."
+    
+    if policy_text:
+        system_prompt = f"""{system_role}
+You are chatting with a user about the following policy document. Answer their questions clearly, thoroughly, and reference specific sections of the policy where possible.
+
+POLICY CONTEXT:
+{policy_text[:10000]}
+"""
+    else:
+        system_prompt = f"""{system_role}
+Answer the user's questions about compliance, governance, and policy management clearly and thoroughly. 
+Provide practical, actionable advice. When drafting policy text, format it professionally.
+"""
+
+    messages = [SystemMessage(content=system_prompt)]
+    for h in history:
+        if h.get("role") == "user":
+            messages.append(HumanMessage(content=h.get("content")))
+        elif h.get("role") == "assistant":
+            messages.append(AIMessage(content=h.get("content")))
+            
+    messages.append(HumanMessage(content=message))
+    
+    try:
+        model_name = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        llm = ChatGroq(model=model_name)
+        response = llm.invoke(messages)
+        return jsonify({"response": response.content})
+    except Exception as e:
+        return jsonify({"error": f"LLM Chat Error: {str(e)}"}), 500
+
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", "5000"))
-    app.run(port=port, debug=False)
+    port = int(__import__("os").getenv("PORT", "5000"))
+    app.run(host="0.0.0.0", port=port, debug=True)

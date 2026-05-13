@@ -1,0 +1,9 @@
+{
+    "event_id": "e5f3efa8-79f7-428e-a02f-f20547b2ef3c",
+    "event_type": "financial_txn",
+    "payload": {
+        "user_id": "E101",
+        "amount": 2000.0,
+        "description": "Paid to Passion Infotech"
+    }
+}

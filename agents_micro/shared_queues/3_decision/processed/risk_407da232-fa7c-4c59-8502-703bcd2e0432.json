@@ -1,0 +1,43 @@
+{
+    "event_id": "407da232-fa7c-4c59-8502-703bcd2e0432",
+    "event_type": "financial_txn",
+    "payload": {
+        "user_id": "POL-AI-001",
+        "amount": 200000.0,
+        "description": "Paid to Passioninfotech for industry project"
+    },
+    "tvi_score": 0.7773,
+    "risk_level": "High",
+    "score_breakdown": {
+        "threat_component": 0.83,
+        "vulnerability_component": 0.715,
+        "impact_component": 0.78,
+        "category_weights": {
+            "threat": 0.4,
+            "vulnerability": 0.35,
+            "impact": 0.25
+        },
+        "factor_scores": {
+            "threat": {
+                "transaction_amount": 10,
+                "user_role_elevation": 7,
+                "external_party_involvement": 6
+            },
+            "vulnerability": {
+                "missing_approval_chain": 8,
+                "policy_coverage_gap": 7,
+                "clearance_mismatch": 6
+            },
+            "impact": {
+                "financial_exposure": 9,
+                "regulatory_breach": 7,
+                "audit_integrity": 6
+            }
+        },
+        "matrix_id": "matrix_financial_txn_v1"
+    },
+    "risk_narrative": "The $200,000 payment to an external vendor far exceeds the normal threshold and likely occurs without the required approval chain, indicating a significant role elevation and clearance mismatch. These gaps expose the organization to high financial loss, potential regulatory violations, and weakened audit integrity.",
+    "governance_maturity_score": 0.4,
+    "compliance_readiness_score": 0.2257,
+    "matched_matrix_id": "matrix_financial_txn_v1"
+}

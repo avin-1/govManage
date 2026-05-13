@@ -1,0 +1,18 @@
+{
+    "event_id": "e5f3efa8-79f7-428e-a02f-f20547b2ef3c",
+    "event_type": "financial_txn",
+    "payload": {
+        "user_id": "E101",
+        "amount": 2000.0,
+        "description": "Paid to Passion Infotech"
+    },
+    "user_authorized": false,
+    "compliance_violation": "User lacks the required role and clearance to execute a financial transaction, violating ISO 27001 controls 5.2 (information security roles and responsibilities), 5.15 (access control), 8.2 (privileged access rights), as well as NIST AI RMF GOVERN-1.2 (accountability structures) and OECD AI 1.5 (accountability).",
+    "matched_controls": [
+        "5.2",
+        "5.15",
+        "8.2",
+        "GOVERN-1.2",
+        "OECD-1.5"
+    ]
+}

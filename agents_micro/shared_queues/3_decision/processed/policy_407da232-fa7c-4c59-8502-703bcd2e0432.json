@@ -1,0 +1,14 @@
+{
+    "event_id": "407da232-fa7c-4c59-8502-703bcd2e0432",
+    "event_type": "financial_txn",
+    "payload": {
+        "user_id": "POL-AI-001",
+        "amount": 200000.0,
+        "description": "Paid to Passioninfotech for industry project"
+    },
+    "policy_analysis_score": 0.85,
+    "matched_policies": [
+        "Zero Trust Vendor Access Control Policy for Financial Systems"
+    ],
+    "policy_conflict": true
+}

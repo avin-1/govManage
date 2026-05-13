@@ -1,0 +1,18 @@
+{
+    "event_id": "e5f3efa8-79f7-428e-a02f-f20547b2ef3c",
+    "event_type": "financial_txn",
+    "payload": {
+        "user_id": "E101",
+        "amount": 2000.0,
+        "description": "Paid to Passion Infotech"
+    },
+    "user_authorized": false,
+    "compliance_violation": "User role 'employee' with clearance 'level_1' is insufficient for initiating a financial transaction of $2000. This violates ISO_27001 controls 5.15 (Access control) and 8.2 (Privileged access rights), as well as ISO_27001 5.2 (Information security roles and responsibilities).",
+    "matched_controls": [
+        "5.15",
+        "8.2",
+        "5.2",
+        "GOVERN-1.2",
+        "OECD-1.5"
+    ]
+}

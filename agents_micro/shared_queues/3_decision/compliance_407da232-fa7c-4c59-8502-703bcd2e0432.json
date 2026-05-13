@@ -1,0 +1,18 @@
+{
+    "event_id": "407da232-fa7c-4c59-8502-703bcd2e0432",
+    "event_type": "financial_txn",
+    "payload": {
+        "user_id": "POL-AI-001",
+        "amount": 200000.0,
+        "description": "Paid to Passioninfotech for industry project"
+    },
+    "user_authorized": false,
+    "compliance_violation": "User role or clearance insufficient for high-value financial transaction",
+    "matched_controls": [
+        "5.2",
+        "5.15",
+        "8.2",
+        "GOVERN-1.2",
+        "OECD-1.5"
+    ]
+}

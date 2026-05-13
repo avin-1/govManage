@@ -29,10 +29,13 @@ class MongoGovDB:
         self.chat_sessions_col = self.db["chat_sessions"]
         self.trusted_sources_col = self.db["trusted_sources"]
         self.crawled_pages_col = self.db["crawled_pages"]
+        self.risk_library_col = self.db["risk_library"]
+        self.policy_packs_col = self.db["policy_packs"]
 
         self._seed_defaults_if_empty()
         self._seed_frameworks_if_empty()
         self._seed_risk_matrices_if_empty()
+        self._seed_risk_library_if_empty()
 
     def _seed_defaults_if_empty(self):
         if self.employees_col.count_documents({}) == 0:
@@ -122,6 +125,121 @@ class MongoGovDB:
                 ]
             )
 
+    def _seed_risk_library_if_empty(self):
+        if self.risk_library_col.count_documents({}) > 0:
+            return
+        self.risk_library_col.insert_many([
+            {
+                "risk_id": "RISK-001", "risk_type": "Regulatory",
+                "title": "No AI Governance Law",
+                "description": "Country or organization lacks formal AI governance policies or legal frameworks, creating significant regulatory exposure.",
+                "severity": "High", "category": "Regulatory",
+                "mitigation": "Establish internal AI governance board; adopt international standards (NIST AI RMF, OECD AI Principles) as interim framework.",
+                "affected_domains": ["AI", "Technology", "Government"],
+                "compliance_links": ["NIST_AI_RMF", "OECD_AI"]
+            },
+            {
+                "risk_id": "RISK-002", "risk_type": "Cyber",
+                "title": "AI Model Exploitation / Adversarial Attacks",
+                "description": "AI/ML models are vulnerable to adversarial inputs, data poisoning, model inversion or extraction attacks.",
+                "severity": "High", "category": "Cybersecurity",
+                "mitigation": "Implement adversarial testing, model security reviews, input validation, and continuous monitoring pipelines.",
+                "affected_domains": ["AI", "IT Security", "Finance"],
+                "compliance_links": ["ISO_27001", "NIST_AI_RMF"]
+            },
+            {
+                "risk_id": "RISK-003", "risk_type": "Ethical",
+                "title": "Bias & Discrimination in AI Outputs",
+                "description": "AI systems produce biased or discriminatory outcomes affecting protected groups, violating ethical standards and potentially legal obligations.",
+                "severity": "Medium", "category": "Ethics & Fairness",
+                "mitigation": "Conduct mandatory bias audits, use diverse training data, implement fairness metrics and human oversight for high-stakes decisions.",
+                "affected_domains": ["AI", "HR", "Finance", "Healthcare"],
+                "compliance_links": ["OECD_AI", "GDPR"]
+            },
+            {
+                "risk_id": "RISK-004", "risk_type": "Operational",
+                "title": "No Business Continuity Plan for AI Systems",
+                "description": "Critical AI systems have no disaster recovery or business continuity plan, leading to unplanned downtime and service disruption.",
+                "severity": "High", "category": "Operational Resilience",
+                "mitigation": "Develop BCP/DRP covering AI system failures, establish RTO/RPO targets, and test recovery procedures quarterly.",
+                "affected_domains": ["Operations", "IT", "AI"],
+                "compliance_links": ["ISO_22301", "ISO_27001"]
+            },
+            {
+                "risk_id": "RISK-005", "risk_type": "Geopolitical",
+                "title": "Sanctions & Restricted Technology Access",
+                "description": "Geopolitical sanctions restrict access to cloud services, AI APIs, or technology vendors, disrupting operations.",
+                "severity": "High", "category": "Geopolitical",
+                "mitigation": "Identify alternative vendors, establish on-premise fallbacks, and maintain geopolitical risk register with quarterly review.",
+                "affected_domains": ["Government", "Finance", "Technology"],
+                "compliance_links": ["ISO_27001"]
+            },
+            {
+                "risk_id": "RISK-006", "risk_type": "Data",
+                "title": "Unregulated Data Usage",
+                "description": "Personal or sensitive organizational data is collected, processed, or shared without adequate consent, retention policies, or classification.",
+                "severity": "High", "category": "Data Governance",
+                "mitigation": "Implement data classification policy, enforce data minimization, establish retention schedules, and conduct regular data audits.",
+                "affected_domains": ["All"],
+                "compliance_links": ["GDPR", "ISO_27001"]
+            },
+            {
+                "risk_id": "RISK-007", "risk_type": "Financial",
+                "title": "Unauthorized Financial Transactions",
+                "description": "Transactions exceeding authorization thresholds proceed without proper role-based approval, exposing the organization to financial loss.",
+                "severity": "High", "category": "Financial Control",
+                "mitigation": "Enforce role-based access controls, multi-level approval workflows for high-value transactions, and real-time anomaly detection.",
+                "affected_domains": ["Finance", "Banking"],
+                "compliance_links": ["ISO_27001", "GDPR"]
+            },
+            {
+                "risk_id": "RISK-008", "risk_type": "Access Control",
+                "title": "Privileged Access Abuse",
+                "description": "Privileged users (admins, directors) misuse elevated access rights, leading to unauthorized data exposure or system manipulation.",
+                "severity": "High", "category": "Identity & Access",
+                "mitigation": "Implement least-privilege principle, privileged access management (PAM) tools, session recording, and quarterly access reviews.",
+                "affected_domains": ["IT Security", "All"],
+                "compliance_links": ["ISO_27001", "NIST_AI_RMF"]
+            },
+            {
+                "risk_id": "RISK-009", "risk_type": "Privacy",
+                "title": "Personal Data Breach",
+                "description": "Unauthorized disclosure of personal data through system vulnerabilities, insider threats, or inadequate security controls.",
+                "severity": "High", "category": "Privacy",
+                "mitigation": "Encrypt data at rest and in transit, implement breach detection tools, and maintain 72-hour breach notification procedures (GDPR Art.33).",
+                "affected_domains": ["Healthcare", "Finance", "HR", "All"],
+                "compliance_links": ["GDPR", "ISO_27001"]
+            },
+            {
+                "risk_id": "RISK-010", "risk_type": "Reputational",
+                "title": "Public Trust Erosion from AI Bias",
+                "description": "Publicized AI bias incidents or discriminatory outcomes damage organizational reputation and stakeholder trust.",
+                "severity": "Medium", "category": "Reputational",
+                "mitigation": "Publish AI transparency reports, establish public AI ethics charter, and create a responsible AI communication strategy.",
+                "affected_domains": ["AI", "Government", "Healthcare"],
+                "compliance_links": ["OECD_AI"]
+            },
+            {
+                "risk_id": "RISK-011", "risk_type": "Supply Chain",
+                "title": "Third-Party Vendor & Supply Chain Risk",
+                "description": "Dependence on third-party vendors for AI services, cloud, or data creates supply chain vulnerabilities and compliance gaps.",
+                "severity": "Medium", "category": "Vendor Risk",
+                "mitigation": "Conduct vendor due diligence, include security requirements in contracts, monitor vendor compliance, and maintain alternative supplier lists.",
+                "affected_domains": ["IT", "Finance", "Operations"],
+                "compliance_links": ["ISO_27001"]
+            },
+            {
+                "risk_id": "RISK-012", "risk_type": "Legal",
+                "title": "Contractual & Regulatory Compliance Gaps",
+                "description": "Organizational policies fail to meet contractual obligations or regulatory requirements, creating legal liability.",
+                "severity": "Medium", "category": "Legal & Compliance",
+                "mitigation": "Conduct regulatory mapping annually, engage legal counsel for policy review, and maintain a compliance obligations register.",
+                "affected_domains": ["Legal", "Finance", "HR", "All"],
+                "compliance_links": ["GDPR", "ISO_27001", "NIST_AI_RMF"]
+            },
+        ])
+        print("[DB] Seeded 12 risk library items")
+
     def _seed_frameworks_if_empty(self):
         if self.frameworks_col.count_documents({}) > 0:
             return
@@ -134,6 +252,10 @@ class MongoGovDB:
                 "framework_id": "ISO_27001",
                 "name": "ISO/IEC 27001:2022",
                 "version": "2022",
+                "region": "Global",
+                "category": "Information Security",
+                "trusted_url": "https://www.iso.org/standard/27001",
+                "official_body": "ISO (International Organization for Standardization)",
                 "description": "International standard for information security management systems (ISMS). Defines requirements for establishing, implementing, maintaining and continually improving an ISMS.",
                 "controls": [
                     {"control_id": "5.1", "title": "Policies for information security", "category": "Organizational Controls", "description": "Information security policy and topic-specific policies shall be defined, approved by management, published and communicated to relevant personnel.", "keywords": ["policy", "information security", "governance", "management approval", "publish"], "mapped_risks": ["High", "Medium"], "severity": "high"},
@@ -151,12 +273,36 @@ class MongoGovDB:
                 ],
             },
             # ----------------------------------------------------------------
+            # ISO 22301 Business Continuity
+            # ----------------------------------------------------------------
+            {
+                "framework_id": "ISO_22301",
+                "name": "ISO 22301:2019",
+                "version": "2019",
+                "region": "Global",
+                "category": "Business Continuity",
+                "trusted_url": "https://www.iso.org/standard/75106.html",
+                "official_body": "ISO (International Organization for Standardization)",
+                "description": "International standard specifying requirements for a business continuity management system (BCMS) to protect organizations from disruptive incidents.",
+                "controls": [
+                    {"control_id": "BCM-1", "title": "Business Continuity Policy", "category": "Leadership", "description": "Top management shall establish a business continuity policy.", "keywords": ["BCP", "continuity", "policy", "resilience", "leadership"], "mapped_risks": ["High"], "severity": "high"},
+                    {"control_id": "BCM-2", "title": "Business Impact Analysis", "category": "Planning", "description": "Organization shall determine requirements for business continuity through business impact analysis.", "keywords": ["BIA", "impact analysis", "recovery", "RTO", "RPO"], "mapped_risks": ["High", "Medium"], "severity": "high"},
+                    {"control_id": "BCM-3", "title": "Business Continuity Strategies", "category": "Planning", "description": "Organization shall determine strategies to protect prioritized activities.", "keywords": ["continuity strategy", "disaster recovery", "resilience", "backup", "failover"], "mapped_risks": ["High"], "severity": "high"},
+                    {"control_id": "BCM-4", "title": "Incident Response Procedures", "category": "Operations", "description": "Organization shall implement documented procedures to manage a disruptive incident.", "keywords": ["incident", "response", "procedure", "escalation", "communication"], "mapped_risks": ["High", "Medium"], "severity": "high"},
+                    {"control_id": "BCM-5", "title": "Exercising and Testing", "category": "Performance", "description": "Continuity plans shall be regularly exercised and tested to ensure they are fit for purpose.", "keywords": ["testing", "exercise", "drill", "rehearsal", "validation"], "mapped_risks": ["Medium"], "severity": "medium"},
+                ]
+            },
+            # ----------------------------------------------------------------
             # NIST AI Risk Management Framework 1.0
             # ----------------------------------------------------------------
             {
                 "framework_id": "NIST_AI_RMF",
                 "name": "NIST AI Risk Management Framework",
                 "version": "1.0",
+                "region": "USA / Global",
+                "category": "AI Governance",
+                "trusted_url": "https://www.nist.gov/system/files/documents/2023/01/26/AI%20RMF%201.0.pdf",
+                "official_body": "NIST (National Institute of Standards and Technology)",
                 "description": "Voluntary framework for managing risks to individuals, organizations, and society associated with the design, development, deployment, and use of AI systems.",
                 "controls": [
                     {"control_id": "GOVERN-1.1", "title": "AI Risk Governance Policies", "category": "GOVERN", "description": "Policies, processes, procedures and practices across the organization related to the mapping, measuring and managing of AI risks are in place, transparent and implemented effectively.", "keywords": ["AI governance", "policy", "risk management", "organizational", "framework"], "mapped_risks": ["High", "Medium"], "severity": "high"},
@@ -178,6 +324,10 @@ class MongoGovDB:
                 "framework_id": "GDPR",
                 "name": "General Data Protection Regulation",
                 "version": "2018",
+                "region": "EU / Global",
+                "category": "Data Privacy",
+                "trusted_url": "https://gdpr-info.eu",
+                "official_body": "European Parliament & Council",
                 "description": "EU regulation establishing rules for the protection of natural persons with regard to the processing of personal data and the free movement of such data.",
                 "controls": [
                     {"control_id": "Art.5", "title": "Principles of personal data processing", "category": "Data Processing Principles", "description": "Personal data shall be processed lawfully, fairly and transparently; collected for specified purposes; adequate, accurate; and kept no longer than necessary.", "keywords": ["personal data", "lawful", "transparent", "purpose limitation", "data minimisation", "accuracy"], "mapped_risks": ["High", "Medium"], "severity": "high"},
@@ -198,6 +348,10 @@ class MongoGovDB:
                 "framework_id": "OECD_AI",
                 "name": "OECD Principles on Artificial Intelligence",
                 "version": "2019",
+                "region": "Global (OECD / G20)",
+                "category": "Ethical AI",
+                "trusted_url": "https://oecd.ai/en/ai-principles",
+                "official_body": "OECD (Organisation for Economic Co-operation and Development)",
                 "description": "Intergovernmental AI policy standard adopted by OECD and G20 members. Promotes trustworthy AI that respects human rights and democratic values.",
                 "controls": [
                     {"control_id": "OECD-1.1", "title": "Inclusive growth and sustainable development", "category": "Values-based Principles", "description": "AI should benefit people and planet by driving inclusive growth, sustainable development and well-being, consistent with human rights and democratic values.", "keywords": ["inclusive", "sustainable", "well-being", "societal benefit", "citizen", "growth"], "mapped_risks": ["Low", "Medium"], "severity": "low"},
@@ -213,7 +367,7 @@ class MongoGovDB:
                 ],
             },
         ])
-        print("[DB] Seeded 4 compliance frameworks (ISO 27001, NIST AI RMF, GDPR, OECD AI)")
+        print("[DB] Seeded 5 compliance frameworks (ISO 27001, ISO 22301, NIST AI RMF, GDPR, OECD AI)")
 
     @staticmethod
     def _strip_id(doc: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -692,6 +846,42 @@ class MongoGovDB:
     def count_crawled_pages(self, source_id: Optional[str] = None) -> int:
         query: Dict[str, Any] = {"source_id": source_id} if source_id else {}
         return self.crawled_pages_col.count_documents(query)
+
+
+    # ------------------------------------------------------------------
+    # Risk Library CRUD
+    # ------------------------------------------------------------------
+
+    def list_risk_library(self) -> List[Dict[str, Any]]:
+        return [self._strip_id(d) for d in self.risk_library_col.find({}).sort("risk_id", 1)]
+
+    def get_risk_library_item(self, risk_id: str) -> Optional[Dict[str, Any]]:
+        return self._strip_id(self.risk_library_col.find_one({"risk_id": risk_id}))
+
+    def get_risk_library_items_by_ids(self, risk_ids: List[str]) -> List[Dict[str, Any]]:
+        return [self._strip_id(d) for d in self.risk_library_col.find({"risk_id": {"$in": risk_ids}})]
+
+    # ------------------------------------------------------------------
+    # Policy Packs CRUD
+    # ------------------------------------------------------------------
+
+    def add_policy_pack(self, doc: Dict[str, Any]) -> str:
+        self.policy_packs_col.insert_one(dict(doc))
+        return doc["pack_id"]
+
+    def list_policy_packs(self) -> List[Dict[str, Any]]:
+        return [
+            self._strip_id(d)
+            for d in self.policy_packs_col.find(
+                {}, {"full_policy_text": 0, "_id": 0}
+            ).sort("created_at", -1)
+        ]
+
+    def get_policy_pack(self, pack_id: str) -> Optional[Dict[str, Any]]:
+        return self._strip_id(self.policy_packs_col.find_one({"pack_id": pack_id}))
+
+    def delete_policy_pack(self, pack_id: str) -> None:
+        self.policy_packs_col.delete_one({"pack_id": pack_id})
 
 
 db = MongoGovDB()

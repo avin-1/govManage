@@ -1,0 +1,43 @@
+{
+    "event_id": "e5f3efa8-79f7-428e-a02f-f20547b2ef3c",
+    "event_type": "financial_txn",
+    "payload": {
+        "user_id": "E101",
+        "amount": 2000.0,
+        "description": "Paid to Passion Infotech"
+    },
+    "tvi_score": 0.6623,
+    "risk_level": "Medium",
+    "score_breakdown": {
+        "threat_component": 0.73,
+        "vulnerability_component": 0.615,
+        "impact_component": 0.62,
+        "category_weights": {
+            "threat": 0.4,
+            "vulnerability": 0.35,
+            "impact": 0.25
+        },
+        "factor_scores": {
+            "threat": {
+                "transaction_amount": 9,
+                "user_role_elevation": 6,
+                "external_party_involvement": 5
+            },
+            "vulnerability": {
+                "missing_approval_chain": 7,
+                "policy_coverage_gap": 6,
+                "clearance_mismatch": 5
+            },
+            "impact": {
+                "financial_exposure": 7,
+                "regulatory_breach": 5,
+                "audit_integrity": 6
+            }
+        },
+        "matrix_id": "matrix_financial_txn_v1"
+    },
+    "risk_narrative": "The $2,000 payment exceeds the approved financial threshold and involves an external vendor, suggesting a likely breach of role\u2011based authority and missing approvals. Combined with probable clearance and policy gaps, this creates significant financial exposure and potential regulatory and audit integrity concerns.",
+    "governance_maturity_score": 0.4,
+    "compliance_readiness_score": 0.239,
+    "matched_matrix_id": "matrix_financial_txn_v1"
+}

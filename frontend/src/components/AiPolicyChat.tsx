@@ -7,6 +7,43 @@ type Message = {
   content: string;
 };
 
+function renderInline(text: string) {
+  const parts = text.split('**');
+  return parts.map((p, k) => k % 2 === 1 ? <strong key={k}>{p}</strong> : p);
+}
+
+function renderMessageContent(content: string) {
+  return content.split('\n').map((line, j) => {
+    if (line.startsWith('### '))
+      return <h3 key={j} className="text-base font-bold text-slate-800 mt-3 mb-1">{line.slice(4)}</h3>;
+    if (line.startsWith('## '))
+      return <h4 key={j} className="text-sm font-bold text-slate-700 mt-2 mb-0.5">{line.slice(3)}</h4>;
+    if (line === '---' || line === '___')
+      return <hr key={j} className="border-slate-200 my-2" />;
+
+    if (line.startsWith('- ') || line.startsWith('* ')) {
+      return (
+        <div key={j} className="flex gap-1.5 min-h-[1em]">
+          <span className="text-slate-400 shrink-0 mt-0.5">•</span>
+          <span>{renderInline(line.slice(2))}</span>
+        </div>
+      );
+    }
+
+    const numMatch = line.match(/^(\d+)\.\s(.+)/);
+    if (numMatch) {
+      return (
+        <div key={j} className="flex gap-1.5 min-h-[1em]">
+          <span className="text-slate-500 shrink-0 font-medium">{numMatch[1]}.</span>
+          <span>{renderInline(numMatch[2])}</span>
+        </div>
+      );
+    }
+
+    return <div key={j} className="min-h-[1em]">{renderInline(line)}</div>;
+  });
+}
+
 const STARTER_PROMPTS = [
   "What is ISO 27001 and how does it apply to a fintech company?",
   "Summarize the key controls in NIST AI Risk Management Framework.",
@@ -128,15 +165,7 @@ export default function AiPolicyChat() {
                     : 'bg-white border border-slate-200 text-slate-700 rounded-bl-none shadow-sm'
                 }`}
               >
-                {m.content.split('\n').map((line, j) => {
-                  if (line.startsWith('### '))
-                    return <h3 key={j} className="text-base font-bold text-slate-800 mt-2 mb-1">{line.replace('### ', '')}</h3>;
-                  if (line.startsWith('## '))
-                    return <h4 key={j} className="text-sm font-bold text-slate-700 mt-2 mb-1">{line.replace('## ', '')}</h4>;
-                  const parts = line.split('**');
-                  const rendered = parts.map((p, k) => k % 2 === 1 ? <strong key={k}>{p}</strong> : p);
-                  return <div key={j} className="min-h-[1em]">{rendered}</div>;
-                })}
+                {renderMessageContent(m.content)}
               </div>
 
               {m.role === 'user' && (

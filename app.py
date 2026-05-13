@@ -1926,54 +1926,101 @@ _sched_thread.start()
 @app.route("/api/chat/reporting", methods=["POST"])
 def chat_reporting():
     """
-    Handle chat interactions for Compliance and Risk reporting.
-    Takes policy text, a user prompt, and chat history.
+    Chat endpoint for Compliance/Risk/General reporting modes.
+    Performs RAG retrieval from ChromaDB, separating internal policy context
+    from external crawled regulatory sources. No emoji output.
     """
     if not ChatGroq:
         return jsonify({"error": "LLM not available"}), 503
-        
+
     body = request.get_json(silent=True) or {}
     message = body.get("message", "").strip()
     policy_text = body.get("policy_text", "").strip()
     history = body.get("history", [])
     report_type = body.get("report_type", "compliance").strip().lower()
-    
+
     if not message:
         return jsonify({"error": "Message is required"}), 400
-        
+
+    # --- RAG retrieval: separate internal (uploaded/generated) from crawled ---
+    internal_context = ""
+    external_context = ""
+    if _chroma_ok:
+        try:
+            hits = search_chunks(query=message, n_results=6)
+            internal_lines: List[str] = []
+            external_lines: List[str] = []
+            for h in hits:
+                meta = h.get("metadata", {})
+                source_type = meta.get("source_type", "uploaded")
+                excerpt = h["text"][:400].strip()
+                label = f"[{meta.get('name', 'Unknown')} | framework: {meta.get('framework', '—')}]"
+                if source_type == "crawled":
+                    url = meta.get("url", "")
+                    external_lines.append(f"  {label}{' | ' + url if url else ''}\n  {excerpt}")
+                else:
+                    internal_lines.append(f"  {label}\n  {excerpt}")
+            if internal_lines:
+                internal_context = "INTERNAL POLICY CONTEXT:\n" + "\n\n".join(internal_lines)
+            if external_lines:
+                external_context = "EXTERNAL REGULATORY SOURCES (crawled):\n" + "\n\n".join(external_lines)
+        except Exception as exc:
+            print(f"[chat/reporting] ChromaDB error: {exc}")
+
     if report_type == "compliance":
-        system_role = "You are an expert Compliance Auditor and GRC specialist."
+        role_desc = (
+            "You are an expert Compliance Auditor and GRC specialist with deep knowledge "
+            "of ISO 27001, GDPR, NIST AI RMF, SOC 2, HIPAA, and other regulatory frameworks."
+        )
     elif report_type == "risk":
-        system_role = "You are an expert Risk Analyst and GRC specialist."
+        role_desc = (
+            "You are an expert Risk Analyst specialising in enterprise risk assessment, "
+            "risk treatment planning, residual risk analysis, and governance impact evaluation."
+        )
     else:
-        system_role = "You are an expert AI Governance Advisor with deep knowledge of global compliance frameworks (ISO 27001, GDPR, NIST AI RMF, SOC2, HIPAA, OECD AI Principles), policy drafting, and enterprise risk management."
-    
+        role_desc = (
+            "You are an expert AI Governance Advisor with deep knowledge of global compliance "
+            "frameworks (ISO 27001, GDPR, NIST AI RMF, SOC 2, HIPAA, OECD AI Principles), "
+            "policy drafting, and enterprise risk management."
+        )
+
+    output_rules = (
+        "Output formatting rules:\n"
+        "- Do not use emojis anywhere in your response.\n"
+        "- Use plain structured text. Mark section headers by writing them in ALL CAPS or with a preceding dash line.\n"
+        "- Use '- ' for bullet points and '1. ' for numbered steps.\n"
+        "- Use **word** only for emphasis on critical terms.\n"
+        "- Be concise, specific, and cite framework controls or policy sections where applicable.\n"
+        "- Do not fabricate standards or controls — only reference what appears in the provided context.\n"
+        "- When drawing from multiple sources, indicate clearly whether a point comes from an internal policy or an external regulatory source."
+    )
+
+    context_parts: List[str] = []
     if policy_text:
-        system_prompt = f"""{system_role}
-You are chatting with a user about the following policy document. Answer their questions clearly, thoroughly, and reference specific sections of the policy where possible.
+        context_parts.append(f"POLICY DOCUMENT UNDER REVIEW:\n{policy_text[:8000]}")
+    if internal_context:
+        context_parts.append(internal_context)
+    if external_context:
+        context_parts.append(external_context)
 
-POLICY CONTEXT:
-{policy_text[:10000]}
-"""
-    else:
-        system_prompt = f"""{system_role}
-Answer the user's questions about compliance, governance, and policy management clearly and thoroughly. 
-Provide practical, actionable advice. When drafting policy text, format it professionally.
-"""
+    system_prompt = f"{role_desc}\n\n{output_rules}"
+    if context_parts:
+        system_prompt += "\n\n" + "\n\n".join(context_parts)
 
-    messages = [SystemMessage(content=system_prompt)]
-    for h in history:
-        if h.get("role") == "user":
-            messages.append(HumanMessage(content=h.get("content")))
-        elif h.get("role") == "assistant":
-            messages.append(AIMessage(content=h.get("content")))
-            
-    messages.append(HumanMessage(content=message))
-    
+    chat_msgs = [SystemMessage(content=system_prompt)]
+    for h in history[-8:]:
+        role = h.get("role", "")
+        content = h.get("content", "")
+        if role == "user":
+            chat_msgs.append(HumanMessage(content=content))
+        elif role == "assistant":
+            chat_msgs.append(AIMessage(content=content))
+    chat_msgs.append(HumanMessage(content=message))
+
     try:
         model_name = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
         llm = ChatGroq(model=model_name)
-        response = llm.invoke(messages)
+        response = llm.invoke(chat_msgs)
         return jsonify({"response": response.content})
     except Exception as e:
         return jsonify({"error": f"LLM Chat Error: {str(e)}"}), 500

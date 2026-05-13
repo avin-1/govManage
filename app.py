@@ -2048,6 +2048,7 @@ def chat_reporting():
         return jsonify({"error": "Message is required"}), 400
 
     # --- RAG retrieval: separate internal (uploaded/generated) from crawled ---
+    hits: List[Dict[str, Any]] = []
     internal_context = ""
     external_context = ""
     if _chroma_ok:
@@ -2071,6 +2072,19 @@ def chat_reporting():
                 external_context = "EXTERNAL REGULATORY SOURCES (crawled):\n" + "\n\n".join(external_lines)
         except Exception as exc:
             print(f"[chat/reporting] ChromaDB error: {exc}")
+
+    # Build citations list to return to frontend
+    citations_out: List[Dict[str, Any]] = [
+        {
+            "source": h.get("metadata", {}).get("name", "Unknown"),
+            "chunk": h["text"][:300],
+            "source_type": h.get("metadata", {}).get("source_type", "uploaded"),
+            "framework": h.get("metadata", {}).get("framework", ""),
+            "url": h.get("metadata", {}).get("url", ""),
+            "distance": round(float(h.get("distance") or 1.0), 4),
+        }
+        for h in hits
+    ]
 
     if report_type == "compliance":
         role_desc = (
@@ -2124,9 +2138,9 @@ def chat_reporting():
 
     try:
         model_name = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-        llm = ChatGroq(model=model_name)
+        llm = ChatGroq(model_name=model_name)
         response = llm.invoke(chat_msgs)
-        return jsonify({"response": response.content})
+        return jsonify({"response": response.content, "citations": citations_out})
     except Exception as e:
         return jsonify({"error": f"LLM Chat Error: {str(e)}"}), 500
 

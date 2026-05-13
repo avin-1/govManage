@@ -11,124 +11,175 @@ type Props = {
 export default function PolicyPackOutput({ pack, onReset }: Props) {
   
   const handleDownload = () => {
-    const doc = new jsPDF();
-    let y = 20;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const PW = doc.internal.pageSize.getWidth();   // 210
+    const ML = 20;                                  // left margin
+    const MR = 20;                                  // right margin
+    const CW = PW - ML - MR;                        // 170 — usable content width
+    const PAGE_H = 297;
+    const FOOT_PAD = 18;                            // space reserved at bottom
+    let y = 22;
 
-    const addPageIfNeeded = (requiredSpace: number) => {
-      if (y + requiredSpace > 280) {
-        doc.addPage();
-        y = 20;
-      }
+    // ── helpers ──────────────────────────────────────────────────────────────
+
+    const guard = (need: number) => {
+      if (y + need > PAGE_H - FOOT_PAD) { doc.addPage(); y = 22; }
     };
 
-    const addSectionTitle = (title: string) => {
-      addPageIfNeeded(15);
-      doc.setFontSize(14);
-      doc.setTextColor(79, 70, 229); // indigo-600
-      doc.setFont("helvetica", "bold");
-      doc.text(title, 20, y);
-      y += 8;
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(51, 65, 85); // slate-700
+    // Render each split line individually — avoids jsPDF letter-spacing bug
+    // that occurs when passing a string[] array directly to doc.text()
+    const printLines = (lines: string[], lh: number) => {
+      lines.forEach((ln: string) => { guard(lh); doc.text(ln, ML, y); y += lh; });
+    };
+
+    const addText = (
+      text: string,
+      opts: { size?: number; style?: string; color?: [number, number, number]; lh?: number; gap?: number } = {}
+    ) => {
+      if (!text?.trim()) return;
+      const { size = 10, style = 'normal', color = [51, 65, 85], lh = 5.8, gap = 3 } = opts;
+      doc.setFontSize(size);
+      doc.setFont('helvetica', style);
+      doc.setTextColor(...color);
+      const lines = doc.splitTextToSize(text, CW) as string[];
+      printLines(lines, lh);
+      y += gap;
+    };
+
+    const sectionTitle = (title: string) => {
+      guard(14);
+      doc.setFontSize(13);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(79, 70, 229);
+      doc.text(title, ML, y);
+      y += 9;
+    };
+
+    const resetBody = () => {
       doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(51, 65, 85);
     };
 
-    const addParagraph = (text: string) => {
-      if (!text) return;
-      const lines = doc.splitTextToSize(text, 170);
-      addPageIfNeeded(lines.length * 5 + 5);
-      doc.text(lines, 20, y);
-      y += lines.length * 5 + 5;
-    };
+    // ── TITLE PAGE HEADER ─────────────────────────────────────────────────────
 
-    // --- TITLE & META ---
-    doc.setFontSize(18);
+    doc.setFontSize(19);
+    doc.setFont('helvetica', 'bold');
     doc.setTextColor(31, 41, 55);
-    doc.setFont("helvetica", "bold");
-    const titleLines = doc.splitTextToSize(pack.policy.name, 170);
-    doc.text(titleLines, 20, y);
-    y += titleLines.length * 7 + 3;
-    
-    doc.setFontSize(10);
+    const titleLines = doc.splitTextToSize(pack.policy.name, CW) as string[];
+    printLines(titleLines, 9);
+    y += 1;
+
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 116, 139);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Sector: ${pack.sector} | Country: ${pack.country || 'Global'} | Risk Level: ${pack.risk_level}`, 20, y);
-    y += 4;
-    
+    doc.text(
+      `Sector: ${pack.sector} | Country: ${pack.country || 'Global'} | Risk Level: ${pack.risk_level}`,
+      ML, y
+    );
+    y += 5;
+
     doc.setDrawColor(226, 232, 240);
-    doc.line(20, y, 190, y);
-    y += 10;
+    doc.setLineWidth(0.4);
+    doc.line(ML, y, PW - MR, y);
+    y += 9;
+    resetBody();
 
-    // --- 1. OBJECTIVE ---
-    addSectionTitle("1. Objective");
-    addParagraph(pack.policy.objective);
+    // ── 1. OBJECTIVE ──────────────────────────────────────────────────────────
+    sectionTitle('1. Objective');
+    resetBody();
+    addText(pack.policy.objective);
 
-    // --- 2. SCOPE ---
-    addSectionTitle("2. Scope");
-    addParagraph(pack.policy.scope);
+    // ── 2. SCOPE ─────────────────────────────────────────────────────────────
+    sectionTitle('2. Scope');
+    resetBody();
+    addText(pack.policy.scope);
 
-    // --- 3. POLICY STATEMENTS ---
-    addSectionTitle("3. Policy Statements");
+    // ── 3. POLICY STATEMENTS ─────────────────────────────────────────────────
+    sectionTitle('3. Policy Statements');
+    resetBody();
     pack.policy.policy_statements?.forEach((stmt, i) => {
-      const text = `${i + 1}. ${stmt}`;
-      addParagraph(text);
+      addText(`${i + 1}. ${stmt}`);
     });
 
-    // --- 4. PROCEDURES ---
-    addSectionTitle("4. Procedures");
+    // ── 4. PROCEDURES ────────────────────────────────────────────────────────
+    sectionTitle('4. Procedures');
     pack.policy.procedures?.forEach(proc => {
-      addPageIfNeeded(10);
-      doc.setFont("helvetica", "bold");
-      doc.text(proc.title, 20, y);
-      y += 6;
-      doc.setFont("helvetica", "normal");
+      guard(10);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(51, 65, 85);
+      doc.text(proc.title, ML, y);
+      y += 7;
+      resetBody();
       proc.steps.forEach((step, j) => {
-        addParagraph(`  Step ${j + 1}: ${step}`);
+        addText(`  Step ${j + 1}: ${step}`, { lh: 5.5, gap: 2 });
       });
+      y += 2;
     });
 
-    // --- 5. ENFORCEMENT ---
-    addSectionTitle("5. Enforcement");
-    addParagraph(pack.policy.enforcement);
+    // ── 5. ENFORCEMENT ───────────────────────────────────────────────────────
+    sectionTitle('5. Enforcement');
+    resetBody();
+    addText(pack.policy.enforcement);
 
-    // --- 6. GOVERNANCE STRUCTURE ---
-    addSectionTitle("6. Governance Structure");
+    // ── 6. GOVERNANCE STRUCTURE ──────────────────────────────────────────────
+    sectionTitle('6. Governance Structure');
     if (pack.policy.governance_structure?.length > 0) {
+      guard(12);
       autoTable(doc, {
         startY: y,
         head: [['Role', 'Responsibility']],
         body: pack.policy.governance_structure.map(g => [g.role, g.responsibility]),
         theme: 'grid',
-        headStyles: { fillColor: [79, 70, 229] },
-        margin: { left: 20, right: 20 }
+        headStyles: { fillColor: [79, 70, 229], fontSize: 9, fontStyle: 'bold', cellPadding: 3 },
+        bodyStyles: { fontSize: 9, cellPadding: 3, lineColor: [226, 232, 240] },
+        columnStyles: { 0: { cellWidth: 52, fontStyle: 'bold' }, 1: { cellWidth: CW - 52 } },
+        margin: { left: ML, right: MR },
       });
       y = (doc as any).lastAutoTable.finalY + 10;
     }
 
-    // --- 7. COMPLIANCE CONTROL MATRIX ---
-    addSectionTitle("7. Compliance Control Matrix");
+    // ── 7. COMPLIANCE CONTROL MATRIX ─────────────────────────────────────────
+    sectionTitle('7. Compliance Control Matrix');
     if (pack.compliance_matrix?.length > 0) {
+      guard(12);
       autoTable(doc, {
         startY: y,
         head: [['Framework', 'Control ID', 'Title', 'Coverage']],
         body: pack.compliance_matrix.map(c => [c.framework_id, c.control_id, c.title, c.coverage]),
         theme: 'grid',
-        headStyles: { fillColor: [16, 185, 129] }, // emerald-500
-        margin: { left: 20, right: 20 }
+        headStyles: { fillColor: [16, 185, 129], fontSize: 9, fontStyle: 'bold', cellPadding: 3 },
+        bodyStyles: { fontSize: 8.5, cellPadding: 2.5, lineColor: [226, 232, 240] },
+        columnStyles: {
+          0: { cellWidth: 30 },
+          1: { cellWidth: 24 },
+          2: { cellWidth: CW - 30 - 24 - 26 },
+          3: { cellWidth: 26 },
+        },
+        margin: { left: ML, right: MR },
       });
       y = (doc as any).lastAutoTable.finalY + 10;
     }
 
-    // --- 8. RISK MITIGATION MAPPING ---
-    addSectionTitle("8. Risk Mitigation Mapping");
+    // ── 8. RISK MITIGATION MAPPING ───────────────────────────────────────────
+    sectionTitle('8. Risk Mitigation Mapping');
     if (pack.risk_mapping?.length > 0) {
+      guard(12);
       autoTable(doc, {
         startY: y,
         head: [['Risk ID', 'Risk Type', 'Mitigation', 'Severity']],
         body: pack.risk_mapping.map(r => [r.risk_id, r.risk_type, r.mitigation, r.severity]),
         theme: 'grid',
-        headStyles: { fillColor: [245, 158, 11] }, // amber-500
-        margin: { left: 20, right: 20 }
+        headStyles: { fillColor: [245, 158, 11], fontSize: 9, fontStyle: 'bold', cellPadding: 3 },
+        bodyStyles: { fontSize: 8.5, cellPadding: 2.5, lineColor: [226, 232, 240] },
+        columnStyles: {
+          0: { cellWidth: 22 },
+          1: { cellWidth: 26 },
+          2: { cellWidth: CW - 22 - 26 - 20 },
+          3: { cellWidth: 20 },
+        },
+        margin: { left: ML, right: MR },
       });
     }
 

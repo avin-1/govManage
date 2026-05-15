@@ -288,6 +288,240 @@ async def health_check():
     }
 
 
+# Framework Discovery Endpoints
+
+class FrameworkDiscoveryRequest(BaseModel):
+    """Request model for framework discovery."""
+    policy_domain: str = Field(..., description="Policy domain (e.g., AI, Healthcare, Finance, Data Privacy)")
+    region: str = Field(default="Global", description="Geographic region (e.g., Global, EU, US, UK)")
+    
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "policy_domain": "AI",
+                "region": "EU"
+            }
+        }
+    }
+
+
+class FrameworkDiscoveryResponse(BaseModel):
+    """Response model for framework discovery."""
+    task_id: str
+    status: str
+    message: str
+    policy_domain: str
+    region: str
+
+
+@app.post("/api/v2/frameworks/discover", response_model=FrameworkDiscoveryResponse)
+async def discover_frameworks(
+    request: FrameworkDiscoveryRequest,
+    background_tasks: BackgroundTasks
+):
+    """
+    Discover compliance frameworks from the internet for a specific policy domain.
+    
+    This endpoint triggers the Framework Discovery Agent to:
+    1. Search the internet for relevant compliance frameworks
+    2. Extract framework details from official sources
+    3. Validate and structure the data
+    4. Save frameworks to the database
+    
+    The discovery process runs asynchronously in the background.
+    """
+    task_id = str(uuid.uuid4())
+    
+    # Run discovery in background
+    background_tasks.add_task(
+        _run_framework_discovery,
+        task_id,
+        request.policy_domain,
+        request.region
+    )
+    
+    return FrameworkDiscoveryResponse(
+        task_id=task_id,
+        status="processing",
+        message=f"Framework discovery initiated for {request.policy_domain} in {request.region}",
+        policy_domain=request.policy_domain,
+        region=request.region
+    )
+
+
+@app.get("/api/v2/frameworks")
+async def list_frameworks(
+    category: Optional[str] = None,
+    region: Optional[str] = None,
+    limit: int = 50
+):
+    """
+    List all compliance frameworks in the database.
+    
+    Query parameters:
+    - category: Filter by framework category (e.g., "AI Governance", "Data Privacy")
+    - region: Filter by geographic region (e.g., "EU", "US", "Global")
+    - limit: Maximum number of frameworks to return (default: 50)
+    """
+    try:
+        query = {}
+        if category:
+            query["category"] = {"$regex": category, "$options": "i"}
+        if region:
+            query["region"] = {"$regex": region, "$options": "i"}
+        
+        frameworks = list(db.frameworks_col.find(
+            query,
+            {
+                "framework_id": 1,
+                "name": 1,
+                "version": 1,
+                "region": 1,
+                "category": 1,
+                "official_body": 1,
+                "description": 1,
+                "trusted_url": 1,
+                "discovery_method": 1,
+                "created_at": 1,
+                "_id": 0
+            }
+        ).limit(limit).sort("name", 1))
+        
+        return {
+            "total": len(frameworks),
+            "frameworks": frameworks,
+            "filters": {
+                "category": category,
+                "region": region
+            }
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v2/frameworks/{framework_id}")
+async def get_framework_details(framework_id: str):
+    """
+    Get detailed information about a specific compliance framework.
+    
+    Returns:
+    - Framework metadata
+    - All controls and requirements
+    - Compliance criteria
+    """
+    try:
+        framework = db.frameworks_col.find_one(
+            {"framework_id": framework_id},
+            {"_id": 0}
+        )
+        
+        if not framework:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Framework not found: {framework_id}"
+            )
+        
+        return framework
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v2/frameworks/discovery/{task_id}")
+async def get_discovery_status(task_id: str):
+    """
+    Get the status of a framework discovery task.
+    
+    Returns:
+    - Task status (processing, completed, failed)
+    - Discovered frameworks
+    - Error details if failed
+    """
+    try:
+        # Check if task exists in audit logs or actions
+        task_log = db.audit_logs_col.find_one({"task_id": task_id})
+        
+        if not task_log:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Discovery task not found: {task_id}"
+            )
+        
+        return {
+            "task_id": task_id,
+            "status": task_log.get("status", "unknown"),
+            "frameworks_discovered": task_log.get("frameworks_discovered", []),
+            "message": task_log.get("message", ""),
+            "timestamp": task_log.get("timestamp", "")
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _run_framework_discovery(task_id: str, policy_domain: str, region: str):
+    """
+    Background task to run framework discovery.
+    """
+    try:
+        from agentic_core.agents.framework_discovery_agent import FrameworkDiscoveryAgent
+        
+        # Initialize agent
+        agent = FrameworkDiscoveryAgent()
+        
+        # Create discovery prompt
+        prompt = f"""Discover compliance frameworks for the following:
+        
+Policy Domain: {policy_domain}
+Geographic Region: {region}
+
+Tasks:
+1. Search the internet for compliance frameworks relevant to {policy_domain}
+2. Focus on frameworks applicable in {region}
+3. Extract framework details from official sources
+4. Validate URLs for trustworthiness
+5. Structure the data for database storage
+6. Save all discovered frameworks to the database
+
+Provide a comprehensive list of frameworks with their requirements and controls."""
+        
+        # Run agent
+        result = agent.run(prompt)
+        
+        # Log result
+        db.audit_logs_col.insert_one({
+            "task_id": task_id,
+            "task_type": "framework_discovery",
+            "policy_domain": policy_domain,
+            "region": region,
+            "status": "completed",
+            "frameworks_discovered": result.get("frameworks_saved", []),
+            "frameworks_updated": result.get("frameworks_updated", []),
+            "total_discovered": result.get("total_frameworks_discovered", 0),
+            "message": "Framework discovery completed successfully",
+            "result": result,
+            "timestamp": datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        # Log error
+        db.audit_logs_col.insert_one({
+            "task_id": task_id,
+            "task_type": "framework_discovery",
+            "policy_domain": policy_domain,
+            "region": region,
+            "status": "failed",
+            "error": str(e),
+            "message": f"Framework discovery failed: {str(e)}",
+            "timestamp": datetime.now().isoformat()
+        })
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("API_PORT", 8000))

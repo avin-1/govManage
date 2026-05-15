@@ -1,4 +1,6 @@
+import base64
 from datetime import datetime, timezone
+import io
 import json
 import os
 import re as _re
@@ -42,8 +44,141 @@ except Exception:
     AIMessage = None
 
 
+try:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors as rl_colors
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+    from reportlab.lib.enums import TA_LEFT, TA_CENTER
+    _reportlab_ok = True
+except Exception as _rl_err:
+    _reportlab_ok = False
+    print(f"[WARNING] reportlab unavailable — PDF generation disabled: {_rl_err}")
+
 app = Flask(__name__)
 CORS(app)
+
+
+# ---------------------------------------------------------------------------
+# PDF Generation Helper
+# ---------------------------------------------------------------------------
+
+def _build_pdf_bytes(pack_doc: dict) -> bytes:
+    """Generate a professional PDF for a policy pack and return raw bytes."""
+    if not _reportlab_ok:
+        return b""
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=20*mm, rightMargin=20*mm,
+        topMargin=18*mm, bottomMargin=18*mm,
+    )
+
+    styles = getSampleStyleSheet()
+    INDIGO = rl_colors.HexColor('#4f46e5')
+    SLATE  = rl_colors.HexColor('#334155')
+    MUTED  = rl_colors.HexColor('#64748b')
+    EMERALD = rl_colors.HexColor('#10b981')
+    AMBER   = rl_colors.HexColor('#f59e0b')
+
+    title_style = ParagraphStyle('Title', fontName='Helvetica-Bold', fontSize=18, textColor=rl_colors.HexColor('#1e293b'), spaceAfter=4)
+    sub_style   = ParagraphStyle('Sub',   fontName='Helvetica',      fontSize=9,  textColor=MUTED, spaceAfter=8)
+    h2_style    = ParagraphStyle('H2',    fontName='Helvetica-Bold', fontSize=12, textColor=INDIGO, spaceBefore=12, spaceAfter=4)
+    body_style  = ParagraphStyle('Body',  fontName='Helvetica',      fontSize=9.5,textColor=SLATE, spaceAfter=4, leading=14)
+    bullet_style= ParagraphStyle('Bullet',fontName='Helvetica',      fontSize=9.5,textColor=SLATE, spaceAfter=3, leading=13, leftIndent=12, bulletIndent=0)
+
+    policy = pack_doc.get('policy', {})
+    story  = []
+
+    # ── HEADER ───────────────────────────────────────────────────────────────
+    story.append(Paragraph(policy.get('name', pack_doc.get('topic', 'Policy Pack')), title_style))
+    meta = f"Sector: {pack_doc.get('sector','—')} | Country: {pack_doc.get('country','Global')} | Risk Level: {pack_doc.get('risk_level','—')} | ID: {pack_doc.get('pack_id','')}"
+    story.append(Paragraph(meta, sub_style))
+    story.append(Spacer(1, 3*mm))
+
+    def section(title, content_paragraphs):
+        story.append(Paragraph(title, h2_style))
+        for p in content_paragraphs:
+            story.append(p)
+        story.append(Spacer(1, 2*mm))
+
+    # ── 1. OBJECTIVE ─────────────────────────────────────────────────────────
+    section('1. Objective', [Paragraph(policy.get('objective', ''), body_style)])
+
+    # ── 2. SCOPE ─────────────────────────────────────────────────────────────
+    section('2. Scope', [Paragraph(policy.get('scope', ''), body_style)])
+
+    # ── 3. POLICY STATEMENTS ─────────────────────────────────────────────────
+    stmts = [Paragraph(f'• {s}', bullet_style) for s in policy.get('policy_statements', [])]
+    section('3. Policy Statements', stmts or [Paragraph('No statements.', body_style)])
+
+    # ── 4. PROCEDURES ────────────────────────────────────────────────────────
+    story.append(Paragraph('4. Procedures', h2_style))
+    for proc in policy.get('procedures', []):
+        story.append(Paragraph(proc.get('title', ''), ParagraphStyle('ProcTitle', fontName='Helvetica-Bold', fontSize=10, textColor=SLATE, spaceBefore=4, spaceAfter=2)))
+        for j, step in enumerate(proc.get('steps', []), 1):
+            story.append(Paragraph(f'{j}. {step}', bullet_style))
+    story.append(Spacer(1, 2*mm))
+
+    # ── 5. ENFORCEMENT ───────────────────────────────────────────────────────
+    section('5. Enforcement', [Paragraph(policy.get('enforcement', ''), body_style)])
+
+    # ── 6. REVIEW CYCLE ──────────────────────────────────────────────────────
+    section('6. Review Cycle', [Paragraph(policy.get('review_cycle', ''), body_style)])
+
+    # ── 7. GOVERNANCE STRUCTURE ──────────────────────────────────────────────
+    gov = policy.get('governance_structure', [])
+    if gov:
+        story.append(Paragraph('7. Governance Structure', h2_style))
+        tdata = [['Role', 'Responsibility']] + [[g.get('role',''), g.get('responsibility','')] for g in gov]
+        tbl = Table(tdata, colWidths=[55*mm, 115*mm])
+        tbl.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), INDIGO), ('TEXTCOLOR', (0,0), (-1,0), rl_colors.white),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('FONTSIZE', (0,0), (-1,-1), 9),
+            ('ROWBACKGROUNDS', (0,1), (-1,-1), [rl_colors.white, rl_colors.HexColor('#f8fafc')]),
+            ('GRID', (0,0), (-1,-1), 0.4, rl_colors.HexColor('#e2e8f0')),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'), ('PADDING', (0,0), (-1,-1), 5),
+        ]))
+        story.append(tbl)
+        story.append(Spacer(1, 4*mm))
+
+    # ── 8. COMPLIANCE CONTROL MATRIX ─────────────────────────────────────────
+    matrix = pack_doc.get('compliance_matrix', [])
+    if matrix:
+        story.append(Paragraph('8. Compliance Control Matrix', h2_style))
+        mdata = [['Framework', 'Control ID', 'Title', 'Coverage']] + \
+                [[c.get('framework_id',''), c.get('control_id',''), c.get('title',''), c.get('coverage','')] for c in matrix]
+        mtbl = Table(mdata, colWidths=[32*mm, 22*mm, 88*mm, 28*mm])
+        mtbl.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), EMERALD), ('TEXTCOLOR', (0,0), (-1,0), rl_colors.white),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('FONTSIZE', (0,0), (-1,-1), 8.5),
+            ('ROWBACKGROUNDS', (0,1), (-1,-1), [rl_colors.white, rl_colors.HexColor('#f0fdf4')]),
+            ('GRID', (0,0), (-1,-1), 0.4, rl_colors.HexColor('#e2e8f0')),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'), ('PADDING', (0,0), (-1,-1), 4),
+        ]))
+        story.append(mtbl)
+        story.append(Spacer(1, 4*mm))
+
+    # ── 9. RISK MITIGATION MAPPING ───────────────────────────────────────────
+    risks = pack_doc.get('risk_mapping', [])
+    if risks:
+        story.append(Paragraph('9. Risk Mitigation Mapping', h2_style))
+        rdata = [['Risk ID', 'Risk Type', 'Mitigation', 'Severity']] + \
+                [[r.get('risk_id',''), r.get('risk_type',''), r.get('mitigation',''), r.get('severity','')] for r in risks]
+        rtbl = Table(rdata, colWidths=[22*mm, 28*mm, 98*mm, 22*mm])
+        rtbl.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), AMBER), ('TEXTCOLOR', (0,0), (-1,0), rl_colors.white),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('FONTSIZE', (0,0), (-1,-1), 8.5),
+            ('ROWBACKGROUNDS', (0,1), (-1,-1), [rl_colors.white, rl_colors.HexColor('#fffbeb')]),
+            ('GRID', (0,0), (-1,-1), 0.4, rl_colors.HexColor('#e2e8f0')),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'), ('PADDING', (0,0), (-1,-1), 4),
+        ]))
+        story.append(rtbl)
+
+    doc.build(story)
+    return buf.getvalue()
 
 
 def _clearance_to_level(clearance: str) -> int:
@@ -675,6 +810,7 @@ def discover_frameworks():
     topic = (body.get("topic") or "").strip()
     sector = (body.get("sector") or "General").strip()
     country = (body.get("country") or "").strip()
+    additional_instructions = (body.get("additional_instructions") or "").strip()
 
     if not topic:
         return jsonify({"error": "topic is required"}), 400
@@ -682,9 +818,11 @@ def discover_frameworks():
     existing = db.list_frameworks()
     existing_ids = {f["framework_id"] for f in existing}
 
+    instructions_context = f"\nAdditional Requirements/Instructions:\n{additional_instructions}\n" if additional_instructions else ""
+
     prompt = (
         "You are a GRC expert. Identify the 5 most relevant compliance frameworks for:\n"
-        f"Topic: {topic}\nSector: {sector}\nRegion: {country or 'Global'}\n\n"
+        f"Topic: {topic}\nSector: {sector}\nRegion: {country or 'Global'}\n{instructions_context}\n"
         "Include major international standards (ISO, NIST, GDPR) AND any sector/region-specific regulations.\n\n"
         "Return ONLY a valid JSON object with this structure (no markdown, no text outside the JSON):\n"
         "{\n"
@@ -1567,6 +1705,7 @@ def suggest_context():
     body = request.get_json(silent=True) or {}
     topic = (body.get("topic") or "").strip()
     sector = (body.get("sector") or "General").strip()
+    additional_instructions = (body.get("additional_instructions") or "").strip()
 
     if not topic:
         return jsonify({"error": "topic is required"}), 400
@@ -1578,12 +1717,14 @@ def suggest_context():
     fw_info = ", ".join([f"{f['framework_id']} ({f['name']})" for f in frameworks])
     risk_info = ", ".join([f"{r['risk_id']} ({r['title']})" for r in risks])
 
+    instructions_context = f"\nAdditional Requirements/Instructions:\n{additional_instructions}\n" if additional_instructions else ""
+
     prompt = f"""
     You are an expert Governance, Risk, and Compliance (GRC) AI.
     Analyze the following policy topic and sector.
     Topic: {topic}
     Sector: {sector}
-
+    {instructions_context}
     Available Compliance Frameworks: {fw_info}
     Available Risk Factors: {risk_info}
 
@@ -1646,6 +1787,7 @@ def generate_policy_pack():
     custom_compliances: List[str] = body.get("custom_compliances", [])
     custom_risks: List[str] = body.get("custom_risks", [])
     mode = (body.get("mode") or "hybrid").strip().lower()
+    additional_instructions = (body.get("additional_instructions") or "").strip()
 
     if not topic:
         return jsonify({"error": "topic is required"}), 400
@@ -1749,13 +1891,14 @@ def generate_policy_pack():
                 "category": "User Defined"
             })
     country_context = f"Country/Region: {country}\n" if country else ""
+    instructions_context = f"\nADDITIONAL INSTRUCTIONS / REQUIREMENTS:\n{additional_instructions}\n" if additional_instructions else ""
 
     # ─── LLM Policy Generation ────────────────────────────────────────────
     prompt = f"""You are an expert governance policy writer and GRC specialist.
 
 {existing_context}
 
-{country_context}Generate a complete, professional governance policy pack on:
+{country_context}{instructions_context}Generate a complete, professional governance policy pack on:
 Topic: {topic}
 Sector: {sector}
 Risk Level: {risk_level}
@@ -1857,6 +2000,7 @@ Include at least 5 policy_statements, 3 procedures (each with 3-4 steps), and 4 
         "country": country,
         "risk_level": risk_level,
         "mode": mode,
+        "additional_instructions": additional_instructions,
         "selected_compliance_ids": selected_compliance_ids,
         "selected_risk_ids": selected_risk_ids,
         "policy": policy_json,
@@ -1870,8 +2014,17 @@ Include at least 5 policy_statements, 3 procedures (each with 3-4 steps), and 4 
         "is_active": True,
     }
 
+    # ─── Generate & store PDF ──────────────────────────────────────────────
+    try:
+        pdf_bytes = _build_pdf_bytes(pack_doc)
+        if pdf_bytes:
+            pack_doc["pdf_base64"] = base64.b64encode(pdf_bytes).decode("utf-8")
+    except Exception as pdf_err:
+        print(f"[generate-pack] PDF generation failed: {pdf_err}")
+
     db.add_policy_pack(pack_doc)
     pack_doc.pop("full_policy_text", None)
+    pack_doc.pop("pdf_base64", None)   # don't send 2MB+ in the JSON response
 
     print(f"[generate-pack] {pack_id} | mode={mode} | compliances={selected_compliance_ids} | risks={selected_risk_ids}")
     return jsonify(pack_doc), 201
@@ -1907,6 +2060,38 @@ def delete_policy_pack(pack_id: str):
             pass
     db.delete_policy_pack(pack_id)
     return jsonify({"status": "deleted", "pack_id": pack_id})
+
+
+@app.route("/api/policy-packs/<pack_id>/pdf", methods=["GET"])
+def get_policy_pack_pdf(pack_id: str):
+    """
+    Serve the stored PDF for a policy pack as an inline application/pdf response.
+    If the pack was created before PDF storage was added, regenerate it on the fly.
+    """
+    from flask import Response
+    pack = db.get_policy_pack(pack_id)
+    if not pack:
+        return jsonify({"error": "Policy pack not found"}), 404
+
+    pdf_b64 = pack.get("pdf_base64", "")
+    if pdf_b64:
+        pdf_bytes = base64.b64decode(pdf_b64)
+    else:
+        # Regenerate for older packs that pre-date PDF storage
+        pdf_bytes = _build_pdf_bytes(pack)
+
+    if not pdf_bytes:
+        return jsonify({"error": "PDF generation unavailable (reportlab not installed)"}), 503
+
+    filename = f"{pack_id}.pdf"
+    return Response(
+        pdf_bytes,
+        mimetype="application/pdf",
+        headers={
+            "Content-Disposition": f"inline; filename={filename}",
+            "Content-Length": str(len(pdf_bytes)),
+        },
+    )
 
 
 # ---------------------------------------------------------------------------

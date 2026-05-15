@@ -35,6 +35,7 @@ export default function GeneratePolicyWizard({ onSuccess }: Props) {
   const [topic, setTopic] = useState('');
   const [sector, setSector] = useState('');
   const [country, setCountry] = useState('');
+  const [additionalInstructions, setAdditionalInstructions] = useState('');
   const [mode, setMode] = useState('hybrid');
   const [riskLevel, setRiskLevel] = useState('High');
 
@@ -76,7 +77,7 @@ export default function GeneratePolicyWizard({ onSuccess }: Props) {
       const res = await fetch(`${API_URL}/compliance/frameworks/discover`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic, sector, country }),
+        body: JSON.stringify({ topic, sector, country, additional_instructions: additionalInstructions }),
       });
 
       if (res.ok) {
@@ -100,7 +101,7 @@ export default function GeneratePolicyWizard({ onSuccess }: Props) {
         const suggestRes = await fetch(`${API_URL}/policies/suggest-context`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ topic, sector }),
+          body: JSON.stringify({ topic, sector, additional_instructions: additionalInstructions }),
         });
         if (suggestRes.ok) {
           const suggestData = await suggestRes.json();
@@ -124,7 +125,7 @@ export default function GeneratePolicyWizard({ onSuccess }: Props) {
       const res = await fetch(`${API_URL}/compliance/frameworks/discover`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic, sector, country }),
+        body: JSON.stringify({ topic, sector, country, additional_instructions: additionalInstructions }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -160,6 +161,7 @@ export default function GeneratePolicyWizard({ onSuccess }: Props) {
           selected_risks: selectedRisks,
           custom_compliances: customFrameworks,
           custom_risks: customRisks,
+          additional_instructions: additionalInstructions,
         }),
       });
       if (!res.ok) throw new Error('Generation failed');
@@ -272,6 +274,15 @@ export default function GeneratePolicyWizard({ onSuccess }: Props) {
                   onChange={e => setCountry(e.target.value)}
                 />
               </div>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Additional Requirements and information</label>
+              <textarea
+                className="input min-h-[80px]"
+                placeholder="e.g., Must comply with local state laws, require strict password policies, etc."
+                value={additionalInstructions}
+                onChange={e => setAdditionalInstructions(e.target.value)}
+              />
             </div>
           </div>
 

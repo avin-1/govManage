@@ -5,9 +5,9 @@ import GeneratePolicyWizard from './components/GeneratePolicyWizard';
 import UploadAssess from './components/UploadAssess';
 import ReportingChat from './components/ReportingChat';
 import AiPolicyChatComponent from './components/AiPolicyChat';
+import PolicyLibrary from './components/PolicyLibrary';
 
-// Placeholder components
-const PolicyLibrary = () => <div className="p-10 text-center"><FileText className="mx-auto text-slate-300 mb-4" size={48}/><h2 className="text-xl font-bold text-slate-500">Policy Library</h2><p className="text-slate-400">View all generated and uploaded policies.</p></div>;
+// Placeholder component
 const SettingsTab = () => <div className="p-10 text-center"><Settings className="mx-auto text-slate-300 mb-4" size={48}/><h2 className="text-xl font-bold text-slate-500">System Settings</h2><p className="text-slate-400">Configure trusted URLs, integrations, and users.</p></div>;
 
 export default function App() {

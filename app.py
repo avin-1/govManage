@@ -64,10 +64,42 @@ CORS(app)
 # PDF Generation Helper
 # ---------------------------------------------------------------------------
 
+def _clean_text_for_pdf(val: Any) -> Any:
+    """Recursively clean common Unicode characters not supported by standard PDF fonts."""
+    if isinstance(val, str):
+        replacements = {
+            '\u2011': '-',  # Non-breaking hyphen
+            '\u2012': '-',  # Figure dash
+            '\u2013': '-',  # En dash
+            '\u2014': '-',  # Em dash
+            '\u2212': '-',  # Minus sign
+            '\u2018': "'",  # Left single quotation mark
+            '\u2019': "'",  # Right single quotation mark
+            '\u201a': "'",  # Single low-9 quotation mark
+            '\u201b': "'",  # Single high-reversed-9 quotation mark
+            '\u201c': '"',  # Left double quotation mark
+            '\u201d': '"',  # Right double quotation mark
+            '\u201e': '"',  # Double low-9 quotation mark
+            '\u201f': '"',  # Double high-reversed-9 quotation mark
+            '\u00a0': ' ',  # Non-breaking space
+            '\u2022': '•',  # Bullet point
+        }
+        for old, new in replacements.items():
+            val = val.replace(old, new)
+        return val
+    elif isinstance(val, list):
+        return [_clean_text_for_pdf(item) for item in val]
+    elif isinstance(val, dict):
+        return {key: _clean_text_for_pdf(value) for key, value in val.items()}
+    return val
+
+
 def _build_pdf_bytes(pack_doc: dict) -> bytes:
     """Generate a professional PDF for a policy pack and return raw bytes."""
     if not _reportlab_ok:
         return b""
+
+    pack_doc = _clean_text_for_pdf(pack_doc)
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(

@@ -2427,6 +2427,112 @@ def chat_reporting():
     except Exception as e:
         return jsonify({"error": f"LLM Chat Error: {str(e)}"}), 500
 
+# ---------------------------------------------------------------------------
+# Email Notification Service
+# ---------------------------------------------------------------------------
+
+try:
+    from email_service import (
+        is_configured as _email_is_configured,
+        get_smtp_config as _get_smtp_config,
+        get_default_recipients as _get_default_recipients,
+        send_weekly_report as _send_weekly_report,
+    )
+    _email_ok = True
+except Exception as _email_err:
+    _email_ok = False
+    print(f"[WARNING] Email service unavailable: {_email_err}")
+
+try:
+    from scheduler import start_scheduler as _start_scheduler, get_scheduler_status as _get_scheduler_status
+    _scheduler_ok = True
+except Exception as _sched_err:
+    _scheduler_ok = False
+    print(f"[WARNING] Scheduler unavailable: {_sched_err}")
+
+
+@app.route("/api/email/status", methods=["GET"])
+def get_email_status():
+    """Return email service configuration and scheduler status."""
+    cfg = _get_smtp_config() if _email_ok else {}
+    configured = _email_is_configured() if _email_ok else False
+    scheduler_status = _get_scheduler_status() if _scheduler_ok else {"running": False}
+
+    # Last dispatch log entry
+    last_dispatch = db.db["email_dispatch_log"].find_one(
+        {}, {"_id": 0}, sort=[("triggered_at", -1)]
+    ) or {}
+
+    return jsonify({
+        "configured": configured,
+        "smtp_host": cfg.get("host", "") if configured else "",
+        "smtp_port": cfg.get("port", 587),
+        "smtp_user": cfg.get("user", "") if configured else "",
+        "from_addr": cfg.get("from_addr", "") if configured else "",
+        "use_tls": cfg.get("use_tls", True),
+        "default_recipients": _get_default_recipients() if _email_ok else [],
+        "scheduler": scheduler_status,
+        "last_dispatch": last_dispatch,
+    })
+
+
+@app.route("/api/email/send-weekly-report", methods=["POST"])
+def trigger_weekly_report():
+    """
+    Manually trigger the weekly GRC report email.
+    Body (optional): { "recipients": ["addr@example.com"] }
+    """
+    if not _email_ok:
+        return jsonify({"error": "Email service unavailable"}), 503
+
+    if not _email_is_configured():
+        return jsonify({
+            "error": "SMTP not configured. Add SMTP_HOST, SMTP_USER, SMTP_PASSWORD to .env"
+        }), 422
+
+    body = request.get_json(silent=True) or {}
+    recipients = body.get("recipients") or None  # None → fallback to env var
+
+    result = _send_weekly_report(recipients=recipients)
+
+    # Log the manual trigger
+    db.db["email_dispatch_log"].insert_one({
+        "triggered_at": datetime.now(timezone.utc).isoformat(),
+        "trigger": "manual",
+        "status": "sent" if result.get("ok") else "failed",
+        "error": result.get("error", ""),
+        "recipients": result.get("recipients", []),
+    })
+
+    status_code = 200 if result.get("ok") else 500
+    return jsonify(result), status_code
+
+
+@app.route("/api/email/dispatch-log", methods=["GET"])
+def get_dispatch_log():
+    """Return the last 20 email dispatch log entries."""
+    logs = list(
+        db.db["email_dispatch_log"]
+        .find({}, {"_id": 0})
+        .sort("triggered_at", -1)
+        .limit(20)
+    )
+    return jsonify(logs)
+
+
+# ---------------------------------------------------------------------------
+# Startup — launch scheduler
+# ---------------------------------------------------------------------------
+
+def _start_services():
+    if _scheduler_ok:
+        _start_scheduler()
+
+# Register startup using Flask app context
+with app.app_context():
+    _start_services()
+
+
 if __name__ == "__main__":
     port = int(__import__("os").getenv("PORT", "5000"))
     app.run(host="0.0.0.0", port=port, debug=True)

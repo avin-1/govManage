@@ -1,14 +1,13 @@
 import { useState } from 'react';
-import { LayoutDashboard, FileText, UploadCloud, ShieldCheck, AlertTriangle, MessageSquare, Settings } from 'lucide-react';
+import { LayoutDashboard, FileText, UploadCloud, ShieldCheck, AlertTriangle, MessageSquare, Bell } from 'lucide-react';
 import PolicyHub from './components/PolicyHub';
 import GeneratePolicyWizard from './components/GeneratePolicyWizard';
 import UploadAssess from './components/UploadAssess';
 import ReportingChat from './components/ReportingChat';
 import AiPolicyChatComponent from './components/AiPolicyChat';
 import PolicyLibrary from './components/PolicyLibrary';
+import EmailSettings from './components/EmailSettings';
 
-// Placeholder component
-const SettingsTab = () => <div className="p-10 text-center"><Settings className="mx-auto text-slate-300 mb-4" size={48}/><h2 className="text-xl font-bold text-slate-500">System Settings</h2><p className="text-slate-400">Configure trusted URLs, integrations, and users.</p></div>;
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState('hub');
@@ -21,7 +20,7 @@ export default function App() {
     { id: 'compliance-report', label: 'Compliance Reports', icon: ShieldCheck },
     { id: 'risk-report', label: 'Risk Reports', icon: AlertTriangle },
     { id: 'chat', label: 'AI Policy Chat', icon: MessageSquare },
-    { id: 'settings', label: 'Settings', icon: Settings },
+    { id: 'settings', label: 'Notifications', icon: Bell },
   ];
 
   return (
@@ -73,7 +72,7 @@ export default function App() {
             <MessageSquare size={16} /> AI Policy Chat
           </button>
           <button className={`nav-item ${currentTab === 'settings' ? 'active' : ''}`} onClick={() => setCurrentTab('settings')}>
-            <Settings size={16} /> Settings
+            <Bell size={16} /> Notifications
           </button>
         </div>
 
@@ -119,7 +118,7 @@ export default function App() {
             {currentTab === 'compliance-report' && <ReportingChat mode="compliance" />}
             {currentTab === 'risk-report' && <ReportingChat mode="risk" />}
             {currentTab === 'chat' && <AiPolicyChatComponent />}
-            {currentTab === 'settings' && <SettingsTab />}
+            {currentTab === 'settings' && <EmailSettings />}
          </div>
       </div>
     </div>

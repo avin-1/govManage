@@ -24,4 +24,5 @@ dependencies = [
     "uvicorn>=0.42.0",
     "watchdog>=6.0.0",
     "firecrawl-py>=4.26.0",
+    "apscheduler>=3.10",
 ]

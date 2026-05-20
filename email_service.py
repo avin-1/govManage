@@ -223,200 +223,210 @@ def compose_weekly_report_data() -> Dict[str, Any]:
 # HTML email template
 # ---------------------------------------------------------------------------
 
-def build_weekly_report_html(data: Dict[str, Any]) -> str:
-    """Render a professional HTML email from the report data dict."""
+def build_weekly_report_html(
+    data: Dict[str, Any],
+    pdf_names: Optional[List[str]] = None,
+) -> str:
+    """
+    Render a compact HTML email from the report data dict.
 
-    fw_tags = "".join(
-        f'<span style="background:#e0e7ff;color:#4338ca;padding:2px 8px;border-radius:12px;'
-        f'font-size:11px;font-weight:600;margin:2px;display:inline-block">{fw}</span>'
-        for fw in data.get("framework_list", [])
-    )
+    The layout is a single 'GRC Snapshot' table with all key metrics visible
+    without scrolling, followed by an attached-PDFs notice and a brief
+    recommendations callout.
 
-    risk_rows = "".join(
-        f'<tr><td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#1e293b">'
-        f'⚠ {risk}</td></tr>'
-        for risk in data.get("top_high_risks", [])
-    ) or '<tr><td style="padding:8px 12px;color:#64748b;font-size:13px">No high-severity risks flagged.</td></tr>'
-
-    recent_pack_rows = "".join(
-        f'<tr><td style="padding:7px 12px;border-bottom:1px solid #f1f5f9;font-size:12px;color:#475569">'
-        f'{p.get("policy", {}).get("name", p.get("pack_id", "—"))}</td>'
-        f'<td style="padding:7px 12px;border-bottom:1px solid #f1f5f9;font-size:12px;color:#64748b">'
-        f'{p.get("sector","—")}</td>'
-        f'<td style="padding:7px 12px;border-bottom:1px solid #f1f5f9;font-size:12px">'
-        f'<span style="background:{"#fef3c7" if p.get("risk_level") == "Medium" else "#fee2e2" if p.get("risk_level") == "High" else "#d1fae5"};'
-        f'color:{"#92400e" if p.get("risk_level") == "Medium" else "#991b1b" if p.get("risk_level") == "High" else "#065f46"};'
-        f'padding:2px 8px;border-radius:9px;font-weight:700;font-size:11px">{p.get("risk_level","—")}</span>'
-        f'</td></tr>'
-        for p in data.get("recent_packs", [])
-    ) or '<tr><td colspan="3" style="padding:8px 12px;color:#64748b;font-size:13px">No policy packs generated this week.</td></tr>'
-
+    pdf_names: list of PDF filenames that were attached to this email.
+               If provided, they are listed in the 'Attached Reports' section.
+    """
     compliance_score = max(0, min(100,
-        100 - int(data.get("high_risk_count", 0) * 8) - int(data.get("actions_flagged", 0) * 3)
+        100 - int(data.get("high_risk_count", 0) * 8)
+            - int(data.get("actions_flagged", 0) * 3)
     ))
     score_color = "#10b981" if compliance_score >= 80 else "#f59e0b" if compliance_score >= 60 else "#ef4444"
 
+    high   = data.get("high_risk_count",   0)
+    medium = data.get("medium_risk_count", 0)
+    low    = data.get("low_risk_count",    0)
+
+    approved = data.get("actions_approved", 0)
+    flagged  = data.get("actions_flagged",  0)
+
+    # ── PDF attachment chips ───────────────────────────────────────────────────
+    if pdf_names:
+        pdf_chips = "  ".join(
+            f'<span style="background:#e0f2fe;color:#0369a1;padding:3px 10px;'
+            f'border-radius:12px;font-size:11px;font-weight:600;white-space:nowrap">'
+            f'📄 {name}</span>'
+            for name in pdf_names
+        )
+        pdf_section = f"""
+  <!-- PDF Attachments -->
+  <tr><td style="background:#ffffff;padding:0 40px 20px">
+    <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:14px 18px">
+      <div style="font-size:12px;font-weight:700;color:#0369a1;margin-bottom:8px">📎 Attached Reports</div>
+      <div style="line-height:2.2">{pdf_chips}</div>
+    </div>
+  </td></tr>"""
+    else:
+        pdf_section = ""
+
+    # ── Inline recommendations ─────────────────────────────────────────────────
+    rec_items = []
+    if high > 0:
+        rec_items.append(
+            f'Review and remediate <strong>{high} high-severity risk(s)</strong> immediately.')
+    if flagged > 0:
+        rec_items.append(
+            f'<strong>{flagged} governance action(s)</strong> require manual review.')
+    if compliance_score < 60:
+        rec_items.append(
+            'Compliance readiness is <strong>below 60%</strong> — initiate a policy gap analysis.')
+    else:
+        rec_items.append(
+            f'Compliance readiness is healthy at <strong>{compliance_score}%</strong>.')
+    rec_items.append('Ensure all active policy packs are reviewed quarterly.')
+
+    rec_html = "".join(f'<li style="margin-bottom:4px">{r}</li>' for r in rec_items)
+
     return f"""<!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>govManage Weekly GRC Report</title></head>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>govManage Weekly GRC Report</title>
+</head>
 <body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 0">
 <tr><td align="center">
-<table width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%">
+<table width="620" cellpadding="0" cellspacing="0" style="max-width:620px;width:100%">
 
-  <!-- Header -->
+  <!-- ── Header ────────────────────────────────────────────────────────────── -->
   <tr><td style="background:linear-gradient(135deg,#312e81 0%,#4338ca 60%,#1d4ed8 100%);
-               border-radius:16px 16px 0 0;padding:36px 40px 28px">
+               border-radius:16px 16px 0 0;padding:32px 36px 26px">
     <table width="100%"><tr>
       <td>
-        <div style="background:rgba(255,255,255,0.12);display:inline-block;padding:8px 14px;
-                    border-radius:8px;margin-bottom:14px">
-          <span style="color:#a5b4fc;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase">
-            GRC Intelligence
-          </span>
+        <div style="background:rgba(255,255,255,0.12);display:inline-block;padding:6px 12px;
+                    border-radius:7px;margin-bottom:12px">
+          <span style="color:#a5b4fc;font-size:10px;font-weight:700;letter-spacing:2px;
+                       text-transform:uppercase">GRC Intelligence</span>
         </div>
-        <h1 style="margin:0 0 6px;color:#ffffff;font-size:26px;font-weight:800;line-height:1.2">
+        <h1 style="margin:0 0 5px;color:#ffffff;font-size:24px;font-weight:800;line-height:1.2">
           Weekly GRC Summary
         </h1>
-        <p style="margin:0;color:#c7d2fe;font-size:14px">{data.get("generated_at","")}</p>
+        <p style="margin:0;color:#c7d2fe;font-size:13px">{data.get("generated_at","")}</p>
       </td>
       <td align="right" valign="top">
         <div style="background:rgba(255,255,255,0.1);border:2px solid rgba(255,255,255,0.2);
-                    border-radius:50%;width:72px;height:72px;display:flex;align-items:center;
-                    justify-content:center;text-align:center;line-height:72px;
-                    font-size:28px">🛡</div>
+                    border-radius:50%;width:64px;height:64px;text-align:center;line-height:64px;
+                    font-size:26px">🛡</div>
       </td>
     </tr></table>
   </td></tr>
 
-  <!-- KPI strip -->
-  <tr><td style="background:#ffffff;padding:24px 40px 20px;border-bottom:1px solid #e2e8f0">
-    <table width="100%" cellpadding="0" cellspacing="0"><tr>
-      <td align="center" style="width:25%">
-        <div style="font-size:28px;font-weight:800;color:#4338ca">{data.get("total_policy_packs",0)}</div>
-        <div style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.5px">Policy Packs</div>
-      </td>
-      <td align="center" style="width:25%">
-        <div style="font-size:28px;font-weight:800;color:#10b981">{data.get("total_frameworks",0)}</div>
-        <div style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.5px">Frameworks</div>
-      </td>
-      <td align="center" style="width:25%">
-        <div style="font-size:28px;font-weight:800;color:#ef4444">{data.get("high_risk_count",0)}</div>
-        <div style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.5px">High Risks</div>
-      </td>
-      <td align="center" style="width:25%">
-        <div style="font-size:28px;font-weight:800;color:{score_color}">{compliance_score}%</div>
-        <div style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.5px">Compliance Score</div>
-      </td>
-    </tr></table>
-  </td></tr>
+  <!-- ── GRC Snapshot table ────────────────────────────────────────────────── -->
+  <tr><td style="background:#ffffff;padding:24px 36px 20px">
+    <table width="100%" cellpadding="0" cellspacing="0"
+           style="border-collapse:collapse;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden">
 
-  <!-- Compliance score bar -->
-  <tr><td style="background:#ffffff;padding:0 40px 24px">
-    <div style="background:#f1f5f9;border-radius:8px;height:8px;overflow:hidden">
-      <div style="background:{score_color};width:{compliance_score}%;height:8px;border-radius:8px;
-                  transition:width 0.5s"></div>
-    </div>
-    <p style="margin:8px 0 0;font-size:12px;color:#94a3b8;text-align:right">
-      Compliance readiness: <strong style="color:{score_color}">{compliance_score}%</strong>
-    </p>
-  </td></tr>
-
-  <!-- Risk summary -->
-  <tr><td style="background:#ffffff;padding:0 40px 28px">
-    <h2 style="margin:0 0 14px;font-size:16px;font-weight:700;color:#1e293b;
-               border-left:4px solid #ef4444;padding-left:10px">
-      ⚠ High-Priority Risk Factors
-    </h2>
-    <table width="100%" style="border-radius:10px;overflow:hidden;border:1px solid #fee2e2">
-      {risk_rows}
-    </table>
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px"><tr>
-      <td align="center" style="background:#fef3c7;border-radius:8px;padding:10px">
-        <span style="font-size:12px;font-weight:700;color:#92400e">Medium: {data.get("medium_risk_count",0)}</span>
-      </td>
-      <td width="12"></td>
-      <td align="center" style="background:#d1fae5;border-radius:8px;padding:10px">
-        <span style="font-size:12px;font-weight:700;color:#065f46">Low: {data.get("low_risk_count",0)}</span>
-      </td>
-      <td width="12"></td>
-      <td align="center" style="background:#f0fdf4;border-radius:8px;padding:10px">
-        <span style="font-size:12px;font-weight:700;color:#166534">Total: {data.get("total_risks",0)}</span>
-      </td>
-    </tr></table>
-  </td></tr>
-
-  <!-- Divider -->
-  <tr><td style="background:#ffffff;padding:0 40px"><hr style="border:none;border-top:1px solid #e2e8f0;margin:0"></td></tr>
-
-  <!-- Recent policy packs -->
-  <tr><td style="background:#ffffff;padding:24px 40px 28px">
-    <h2 style="margin:0 0 14px;font-size:16px;font-weight:700;color:#1e293b;
-               border-left:4px solid #4338ca;padding-left:10px">
-      📋 Recent Policy Packs
-    </h2>
-    <table width="100%" style="border-radius:10px;overflow:hidden;border:1px solid #e2e8f0">
-      <tr style="background:#f8fafc">
-        <th style="text-align:left;padding:8px 12px;font-size:12px;font-weight:700;color:#475569;
-                   text-transform:uppercase;letter-spacing:0.5px">Policy Name</th>
-        <th style="text-align:left;padding:8px 12px;font-size:12px;font-weight:700;color:#475569;
-                   text-transform:uppercase;letter-spacing:0.5px">Sector</th>
-        <th style="text-align:left;padding:8px 12px;font-size:12px;font-weight:700;color:#475569;
-                   text-transform:uppercase;letter-spacing:0.5px">Risk Level</th>
+      <!-- Table header row -->
+      <tr style="background:#1e293b">
+        <td colspan="2" style="padding:11px 16px">
+          <span style="font-size:12px;font-weight:700;color:#ffffff;
+                       text-transform:uppercase;letter-spacing:0.5px">GRC Snapshot</span>
+        </td>
       </tr>
-      {recent_pack_rows}
+
+      <!-- Row 1: Compliance score  /  Risk summary -->
+      <tr>
+        <td style="padding:16px;border-right:1px solid #e2e8f0;
+                   border-bottom:1px solid #e2e8f0;width:50%;vertical-align:top">
+          <div style="font-size:10px;font-weight:700;color:#64748b;
+                      text-transform:uppercase;letter-spacing:0.5px">Compliance Score</div>
+          <div style="font-size:28px;font-weight:800;color:{score_color};margin-top:6px;
+                      line-height:1">{compliance_score}%</div>
+          <div style="background:#f1f5f9;border-radius:4px;height:5px;margin-top:8px;overflow:hidden">
+            <div style="background:{score_color};width:{compliance_score}%;height:5px"></div>
+          </div>
+        </td>
+        <td style="padding:16px;border-bottom:1px solid #e2e8f0;width:50%;vertical-align:top">
+          <div style="font-size:10px;font-weight:700;color:#64748b;
+                      text-transform:uppercase;letter-spacing:0.5px">Risk Breakdown</div>
+          <div style="margin-top:8px">
+            <span style="font-size:20px;font-weight:800;color:#ef4444">{high}</span>
+            <span style="font-size:11px;color:#64748b"> High</span>
+            &nbsp;
+            <span style="font-size:20px;font-weight:800;color:#f59e0b">{medium}</span>
+            <span style="font-size:11px;color:#64748b"> Med</span>
+            &nbsp;
+            <span style="font-size:20px;font-weight:800;color:#10b981">{low}</span>
+            <span style="font-size:11px;color:#64748b"> Low</span>
+          </div>
+        </td>
+      </tr>
+
+      <!-- Row 2: Policy packs  /  Active frameworks -->
+      <tr>
+        <td style="padding:16px;border-right:1px solid #e2e8f0;
+                   border-bottom:1px solid #e2e8f0;vertical-align:top">
+          <div style="font-size:10px;font-weight:700;color:#64748b;
+                      text-transform:uppercase;letter-spacing:0.5px">Policy Packs</div>
+          <div style="font-size:28px;font-weight:800;color:#4338ca;margin-top:6px;
+                      line-height:1">{data.get("total_policy_packs",0)}</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:4px">
+            {data.get("packs_this_month",0)} added this month
+          </div>
+        </td>
+        <td style="padding:16px;border-bottom:1px solid #e2e8f0;vertical-align:top">
+          <div style="font-size:10px;font-weight:700;color:#64748b;
+                      text-transform:uppercase;letter-spacing:0.5px">Active Frameworks</div>
+          <div style="font-size:28px;font-weight:800;color:#0f766e;margin-top:6px;
+                      line-height:1">{data.get("total_frameworks",0)}</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:4px">
+            {data.get("total_risks",0)} risks in library
+          </div>
+        </td>
+      </tr>
+
+      <!-- Row 3: Governance  /  Active documents -->
+      <tr>
+        <td style="padding:16px;border-right:1px solid #e2e8f0;vertical-align:top">
+          <div style="font-size:10px;font-weight:700;color:#64748b;
+                      text-transform:uppercase;letter-spacing:0.5px">Governance Actions</div>
+          <div style="margin-top:8px">
+            <span style="background:#dcfce7;color:#166534;padding:3px 10px;border-radius:12px;
+                         font-size:12px;font-weight:700">&#10003; {approved} Approved</span>
+            &nbsp;
+            <span style="background:#fee2e2;color:#991b1b;padding:3px 10px;border-radius:12px;
+                         font-size:12px;font-weight:700">&#9888; {flagged} Flagged</span>
+          </div>
+        </td>
+        <td style="padding:16px;vertical-align:top">
+          <div style="font-size:10px;font-weight:700;color:#64748b;
+                      text-transform:uppercase;letter-spacing:0.5px">Active Documents</div>
+          <div style="font-size:28px;font-weight:800;color:#7c3aed;margin-top:6px;
+                      line-height:1">{data.get("active_documents",0)}</div>
+        </td>
+      </tr>
+
     </table>
   </td></tr>
-
-  <!-- Frameworks in use -->
-  <tr><td style="background:#ffffff;padding:0 40px 28px">
-    <h2 style="margin:0 0 14px;font-size:16px;font-weight:700;color:#1e293b;
-               border-left:4px solid #10b981;padding-left:10px">
-      🔒 Active Compliance Frameworks
-    </h2>
-    <div>{fw_tags}</div>
+{pdf_section}
+  <!-- ── Recommendations ───────────────────────────────────────────────────── -->
+  <tr><td style="background:#ffffff;padding:0 36px 24px">
+    <div style="border-left:4px solid #f59e0b;background:#fffbeb;
+                padding:12px 16px;border-radius:0 8px 8px 0">
+      <div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px">
+        💡 Key Actions
+      </div>
+      <ul style="margin:0;padding-left:16px;color:#78350f;font-size:12px;line-height:1.7">
+        {rec_html}
+      </ul>
+    </div>
   </td></tr>
 
-  <!-- Governance actions -->
-  <tr><td style="background:#ffffff;padding:0 40px 28px">
-    <h2 style="margin:0 0 14px;font-size:16px;font-weight:700;color:#1e293b;
-               border-left:4px solid #f59e0b;padding-left:10px">
-      📊 Governance Activity (Last 20 Actions)
-    </h2>
-    <table width="100%" cellpadding="0" cellspacing="0"><tr>
-      <td align="center" style="background:#f0fdf4;border-radius:10px;padding:16px">
-        <div style="font-size:24px;font-weight:800;color:#16a34a">{data.get("actions_approved",0)}</div>
-        <div style="font-size:11px;font-weight:700;color:#166534;text-transform:uppercase">Approved</div>
-      </td>
-      <td width="14"></td>
-      <td align="center" style="background:#fef2f2;border-radius:10px;padding:16px">
-        <div style="font-size:24px;font-weight:800;color:#dc2626">{data.get("actions_flagged",0)}</div>
-        <div style="font-size:11px;font-weight:700;color:#991b1b;text-transform:uppercase">Flagged / Review</div>
-      </td>
-      <td width="14"></td>
-      <td align="center" style="background:#f8fafc;border-radius:10px;padding:16px">
-        <div style="font-size:24px;font-weight:800;color:#334155">{data.get("active_documents",0)}</div>
-        <div style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase">Active Docs</div>
-      </td>
-    </tr></table>
-  </td></tr>
-
-  <!-- Recommendations -->
-  <tr><td style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:0;padding:20px 40px">
-    <h2 style="margin:0 0 10px;font-size:14px;font-weight:700;color:#1e40af">💡 Automated Recommendations</h2>
-    <ul style="margin:0;padding-left:18px;color:#1d4ed8;font-size:13px;line-height:1.7">
-      {"<li>Review and remediate <strong>" + str(data.get("high_risk_count",0)) + " high-severity risk factors</strong> immediately.</li>" if data.get("high_risk_count",0) > 0 else "<li>No high-severity risks detected. Maintain current controls.</li>"}
-      {"<li><strong>" + str(data.get("actions_flagged",0)) + " governance actions</strong> require manual review and resolution.</li>" if data.get("actions_flagged",0) > 0 else ""}
-      {"<li>Compliance readiness is <strong>below 60%</strong> — initiate a policy gap analysis.</li>" if compliance_score < 60 else "<li>Compliance readiness is healthy at <strong>" + str(compliance_score) + "%</strong>.</li>"}
-      <li>Ensure all active policy packs are reviewed quarterly.</li>
-    </ul>
-  </td></tr>
-
-  <!-- Footer -->
-  <tr><td style="background:#1e293b;border-radius:0 0 16px 16px;padding:20px 40px">
+  <!-- ── Footer ────────────────────────────────────────────────────────────── -->
+  <tr><td style="background:#1e293b;border-radius:0 0 16px 16px;padding:18px 36px">
     <p style="margin:0;font-size:11px;color:#94a3b8;text-align:center">
-      This report was automatically generated by <strong style="color:#c7d2fe">govManage Intelligence</strong>.
+      Automatically generated by <strong style="color:#c7d2fe">govManage Intelligence</strong>.
       &nbsp;|&nbsp; Do not reply to this email.
     </p>
   </td></tr>
@@ -644,8 +654,9 @@ def send_weekly_report(
     attachments = _generate_report_pdfs(data)
     logger.info("[email] %d PDF attachment(s) ready", len(attachments))
 
-    subject = f"govManage Weekly GRC Report — {data.get('generated_at', 'Weekly')}"
-    html_body = build_weekly_report_html(data)
+    subject   = f"govManage Weekly GRC Report — {data.get('generated_at', 'Weekly')}"
+    pdf_names = [a[0] for a in attachments]
+    html_body = build_weekly_report_html(data, pdf_names=pdf_names)
     text_body = build_weekly_report_text(data)
 
     result = send_email(recipients, subject, html_body, text_body, attachments=attachments)

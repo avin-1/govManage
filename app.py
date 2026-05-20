@@ -65,27 +65,60 @@ CORS(app)
 # ---------------------------------------------------------------------------
 
 def _clean_text_for_pdf(val: Any) -> Any:
-    """Recursively clean common Unicode characters not supported by standard PDF fonts."""
+    """Recursively clean Unicode characters not supported by reportlab's built-in fonts.
+
+    Reportlab's standard fonts (Helvetica, Times-Roman, Courier) only support
+    the Latin-1 / CP1252 character set (code points 0-255). Any character outside
+    this range will be silently dropped or rendered as a garbled glyph by the
+    browser's PDF renderer (Chrome, Firefox, Edge all behave differently).
+    We therefore:
+      1. Replace the most common fancy Unicode chars with ASCII equivalents.
+      2. Encode the final string to latin-1, dropping anything that still can't fit.
+    """
     if isinstance(val, str):
         replacements = {
-            '\u2011': '-',  # Non-breaking hyphen
-            '\u2012': '-',  # Figure dash
-            '\u2013': '-',  # En dash
-            '\u2014': '-',  # Em dash
-            '\u2212': '-',  # Minus sign
-            '\u2018': "'",  # Left single quotation mark
-            '\u2019': "'",  # Right single quotation mark
-            '\u201a': "'",  # Single low-9 quotation mark
-            '\u201b': "'",  # Single high-reversed-9 quotation mark
-            '\u201c': '"',  # Left double quotation mark
-            '\u201d': '"',  # Right double quotation mark
-            '\u201e': '"',  # Double low-9 quotation mark
-            '\u201f': '"',  # Double high-reversed-9 quotation mark
-            '\u00a0': ' ',  # Non-breaking space
-            '\u2022': '•',  # Bullet point
+            # Dashes
+            '\u2011': '-',   # Non-breaking hyphen
+            '\u2012': '-',   # Figure dash
+            '\u2013': '-',   # En dash
+            '\u2014': '-',   # Em dash
+            '\u2212': '-',   # Minus sign
+            # Quotes
+            '\u2018': "'",   # Left single quotation mark
+            '\u2019': "'",   # Right single quotation mark
+            '\u201a': "'",   # Single low-9 quotation mark
+            '\u201b': "'",   # Single high-reversed-9 quotation mark
+            '\u201c': '"',   # Left double quotation mark
+            '\u201d': '"',   # Right double quotation mark
+            '\u201e': '"',   # Double low-9 quotation mark
+            '\u201f': '"',   # Double high-reversed-9 quotation mark
+            # Spaces
+            '\u00a0': ' ',   # Non-breaking space
+            '\u202f': ' ',   # Narrow no-break space
+            '\u2009': ' ',   # Thin space
+            # Bullets / symbols  (U+2022 is NOT in Latin-1, use ASCII '*')
+            '\u2022': '*',   # Bullet point  -> asterisk (Latin-1 safe)
+            '\u2023': '>',   # Triangular bullet
+            '\u2043': '-',   # Hyphen bullet
+            '\u25cf': '*',   # Black circle
+            '\u25e6': 'o',   # White bullet
+            # Ellipsis
+            '\u2026': '...',  # Horizontal ellipsis
+            # Misc common symbols
+            '\u00b7': '.',   # Middle dot
+            '\u2192': '->',  # Right arrow
+            '\u2190': '<-',  # Left arrow
+            '\u2713': 'v',   # Check mark
+            '\u2714': 'v',   # Heavy check mark
+            '\u2715': 'x',   # Multiplication x
+            '\u2716': 'x',   # Heavy multiplication x
         }
         for old, new in replacements.items():
             val = val.replace(old, new)
+        # Final safety net: drop anything still outside Latin-1 (0x00-0xFF)
+        # encode to latin-1 with 'replace' would put '?' for unknowns;
+        # using 'ignore' keeps the text readable without question-marks.
+        val = val.encode('latin-1', errors='ignore').decode('latin-1')
         return val
     elif isinstance(val, list):
         return [_clean_text_for_pdf(item) for item in val]
@@ -2202,28 +2235,120 @@ def get_policy_pack_pdf(pack_id: str):
     if not pack:
         return jsonify({"error": "Policy pack not found"}), 404
 
-    pdf_b64 = pack.get("pdf_base64", "")
-    if pdf_b64:
-        pdf_bytes = base64.b64decode(pdf_b64)
-    else:
-        # Regenerate for older packs that pre-date PDF storage
-        pdf_bytes = _build_pdf_bytes(pack)
+    # Always regenerate from the pack document using the current (fixed) encoder.
+    # This ensures any packs that were stored with the old broken encoder
+    # (which let non-Latin-1 chars through) are automatically corrected on the
+    # next view/download — no manual intervention required.
+    pdf_bytes = _build_pdf_bytes(pack)
+
+    if not pdf_bytes and pack.get("pdf_base64"):
+        # Fallback: serve cached blob only if live generation fails (e.g. reportlab missing)
+        pdf_bytes = base64.b64decode(pack["pdf_base64"])
 
     if not pdf_bytes:
         return jsonify({"error": "PDF generation unavailable (reportlab not installed)"}), 503
 
     filename = f"{pack_id}.pdf"
-    # ?download=1 → attachment (forces Save dialog); default → inline (viewer)
-    disposition = "attachment" if request.args.get("download") == "1" else "inline"
     return Response(
         pdf_bytes,
         mimetype="application/pdf",
         headers={
-            "Content-Disposition": f"{disposition}; filename={filename}",
+            # RFC 6266: filename must be quoted; use filename* for non-ASCII safety
+            "Content-Disposition": f'inline; filename="{filename}"; filename*=UTF-8\'\'{filename}',
             "Content-Length": str(len(pdf_bytes)),
-            "Cache-Control": "no-store",
+            # Prevent browsers from sniffing the content type and misinterpreting encoding
+            "X-Content-Type-Options": "nosniff",
+            # Allow browsers to cache the PDF — avoids re-fetching on every open
+            "Cache-Control": "private, max-age=3600",
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Email / Notification Routes
+# ---------------------------------------------------------------------------
+
+@app.route("/api/email/status", methods=["GET"])
+def email_status():
+    """
+    Return current SMTP configuration status and scheduler state.
+    Used by the EmailSettings frontend component on load.
+    """
+    from email_service import get_smtp_config, is_configured, get_default_recipients
+    from scheduler import get_scheduler_status
+
+    cfg = get_smtp_config()
+    sched = get_scheduler_status()
+
+    # Fetch the most recent dispatch log entry as last_dispatch
+    try:
+        last_log = db.db["email_dispatch_log"].find_one(
+            {}, {"_id": 0}, sort=[("triggered_at", -1)]
+        ) or {}
+    except Exception:
+        last_log = {}
+
+    return jsonify({
+        "configured": is_configured(),
+        "smtp_host": cfg["host"],
+        "smtp_port": cfg["port"],
+        "smtp_user": cfg["user"],
+        "from_addr": cfg["from_addr"],
+        "use_tls": cfg["use_tls"],
+        "default_recipients": get_default_recipients(),
+        "scheduler": sched,
+        "last_dispatch": last_log,
+    })
+
+
+@app.route("/api/email/dispatch-log", methods=["GET"])
+def email_dispatch_log():
+    """
+    Return the full email dispatch history (most recent first, capped at 50).
+    Used by the EmailSettings frontend component for the Dispatch History table.
+    """
+    try:
+        logs = list(
+            db.db["email_dispatch_log"]
+            .find({}, {"_id": 0})
+            .sort("triggered_at", -1)
+            .limit(50)
+        )
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify(logs)
+
+
+@app.route("/api/email/send-weekly-report", methods=["POST"])
+def send_weekly_report_now():
+    """
+    Manually trigger the weekly GRC report email.
+    Body (optional): { "recipients": ["addr@example.com"] }
+    Logs the dispatch result to email_dispatch_log collection.
+    """
+    from email_service import send_weekly_report
+
+    body = request.get_json(silent=True) or {}
+    recipients = body.get("recipients") or None  # None → falls back to EMAIL_RECIPIENTS env var
+
+    result = send_weekly_report(recipients=recipients)
+
+    # Persist dispatch log entry
+    status_str = "sent" if result.get("ok") else "failed"
+    try:
+        db.db["email_dispatch_log"].insert_one({
+            "triggered_at": datetime.now(timezone.utc).isoformat(),
+            "trigger": "manual",
+            "status": status_str,
+            "error": result.get("error", ""),
+            "recipients": result.get("recipients", []),
+        })
+    except Exception as log_err:
+        print(f"[email] Failed to persist dispatch log: {log_err}")
+
+    http_status = 200 if result.get("ok") else 502
+    return jsonify(result), http_status
 
 
 # ---------------------------------------------------------------------------
@@ -2526,112 +2651,6 @@ def chat_reporting():
         return jsonify({"response": response.content, "citations": citations_out})
     except Exception as e:
         return jsonify({"error": f"LLM Chat Error: {str(e)}"}), 500
-
-# ---------------------------------------------------------------------------
-# Email Notification Service
-# ---------------------------------------------------------------------------
-
-try:
-    from email_service import (
-        is_configured as _email_is_configured,
-        get_smtp_config as _get_smtp_config,
-        get_default_recipients as _get_default_recipients,
-        send_weekly_report as _send_weekly_report,
-    )
-    _email_ok = True
-except Exception as _email_err:
-    _email_ok = False
-    print(f"[WARNING] Email service unavailable: {_email_err}")
-
-try:
-    from scheduler import start_scheduler as _start_scheduler, get_scheduler_status as _get_scheduler_status
-    _scheduler_ok = True
-except Exception as _sched_err:
-    _scheduler_ok = False
-    print(f"[WARNING] Scheduler unavailable: {_sched_err}")
-
-
-@app.route("/api/email/status", methods=["GET"])
-def get_email_status():
-    """Return email service configuration and scheduler status."""
-    cfg = _get_smtp_config() if _email_ok else {}
-    configured = _email_is_configured() if _email_ok else False
-    scheduler_status = _get_scheduler_status() if _scheduler_ok else {"running": False}
-
-    # Last dispatch log entry
-    last_dispatch = db.db["email_dispatch_log"].find_one(
-        {}, {"_id": 0}, sort=[("triggered_at", -1)]
-    ) or {}
-
-    return jsonify({
-        "configured": configured,
-        "smtp_host": cfg.get("host", "") if configured else "",
-        "smtp_port": cfg.get("port", 587),
-        "smtp_user": cfg.get("user", "") if configured else "",
-        "from_addr": cfg.get("from_addr", "") if configured else "",
-        "use_tls": cfg.get("use_tls", True),
-        "default_recipients": _get_default_recipients() if _email_ok else [],
-        "scheduler": scheduler_status,
-        "last_dispatch": last_dispatch,
-    })
-
-
-@app.route("/api/email/send-weekly-report", methods=["POST"])
-def trigger_weekly_report():
-    """
-    Manually trigger the weekly GRC report email.
-    Body (optional): { "recipients": ["addr@example.com"] }
-    """
-    if not _email_ok:
-        return jsonify({"error": "Email service unavailable"}), 503
-
-    if not _email_is_configured():
-        return jsonify({
-            "error": "SMTP not configured. Add SMTP_HOST, SMTP_USER, SMTP_PASSWORD to .env"
-        }), 422
-
-    body = request.get_json(silent=True) or {}
-    recipients = body.get("recipients") or None  # None → fallback to env var
-
-    result = _send_weekly_report(recipients=recipients)
-
-    # Log the manual trigger
-    db.db["email_dispatch_log"].insert_one({
-        "triggered_at": datetime.now(timezone.utc).isoformat(),
-        "trigger": "manual",
-        "status": "sent" if result.get("ok") else "failed",
-        "error": result.get("error", ""),
-        "recipients": result.get("recipients", []),
-    })
-
-    status_code = 200 if result.get("ok") else 500
-    return jsonify(result), status_code
-
-
-@app.route("/api/email/dispatch-log", methods=["GET"])
-def get_dispatch_log():
-    """Return the last 20 email dispatch log entries."""
-    logs = list(
-        db.db["email_dispatch_log"]
-        .find({}, {"_id": 0})
-        .sort("triggered_at", -1)
-        .limit(20)
-    )
-    return jsonify(logs)
-
-
-# ---------------------------------------------------------------------------
-# Startup — launch scheduler
-# ---------------------------------------------------------------------------
-
-def _start_services():
-    if _scheduler_ok:
-        _start_scheduler()
-
-# Register startup using Flask app context
-with app.app_context():
-    _start_services()
-
 
 if __name__ == "__main__":
     port = int(__import__("os").getenv("PORT", "5000"))

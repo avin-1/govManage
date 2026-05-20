@@ -23,6 +23,7 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "uvicorn>=0.42.0",
     "watchdog>=6.0.0",
-    "firecrawl-py>=4.26.0",
-    "apscheduler>=3.10",
+    "firecrawl-py>=1.0.0",
+    "apscheduler>=3.10.0",
+    "reportlab>=4.0.0",
 ]

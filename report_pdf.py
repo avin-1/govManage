@@ -32,7 +32,7 @@ try:
         SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
         HRFlowable,
     )
-    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
     _ok = True
 except Exception:
     _ok = False
@@ -102,10 +102,12 @@ def _make_styles() -> dict:
             textColor=SLATE, spaceBefore=8, spaceAfter=3, wordWrap='CJK'),
         'body': ParagraphStyle(
             'RPBody', fontName='Helvetica', fontSize=9.5,
-            textColor=SLATE, spaceAfter=4, leading=14, wordWrap='CJK'),
+            textColor=SLATE, spaceAfter=4, leading=14,
+            alignment=TA_JUSTIFY, wordWrap='CJK'),
         'bullet': ParagraphStyle(
             'RPBullet', fontName='Helvetica', fontSize=9.5,
             textColor=SLATE, spaceAfter=3, leading=13,
+            alignment=TA_JUSTIFY,
             leftIndent=14, bulletIndent=0, wordWrap='CJK'),
         # ── Table cells ────────────────────────────────────────────────────────
         'th': ParagraphStyle(
@@ -572,15 +574,177 @@ def build_risk_report_pdf(report_data: Dict[str, Any]) -> bytes:
     return buf.getvalue()
 
 
-# ── 3. Policy Pack PDF (thin re-export) ───────────────────────────────────────
+# ── 3. Policy Pack PDF ────────────────────────────────────────────────────────
 
 def build_policy_pack_pdf(pack_doc: Dict[str, Any]) -> bytes:
     """
-    Delegate to app._build_pdf_bytes so there is a single PDF-generation
-    path for callers that should not import from app.py directly.
+    Generate a professional A4 PDF for a policy pack document.
+    Uses the same layout language (header band, KPI strip, section headers,
+    page footer) as the compliance and risk report PDFs.
+    pack_doc: the MongoDB document as stored by db.add_policy_pack().
+    Returns raw PDF bytes, or b"" if reportlab is unavailable.
     """
-    try:
-        from app import _build_pdf_bytes
-        return _build_pdf_bytes(pack_doc)
-    except Exception:
+    if not _ok:
         return b""
+
+    pack_doc = clean_text(pack_doc)
+    s   = _make_styles()
+    buf = io.BytesIO()
+    story: list = []
+
+    policy   = pack_doc.get('policy', {})
+    pack_id  = pack_doc.get('pack_id', '')
+    sector   = pack_doc.get('sector', '—')
+    country  = pack_doc.get('country', 'Global')
+    risk_lvl = pack_doc.get('risk_level', '—')
+
+    # Compliance scores embedded in the policy sub-document
+    scores       = policy.get('compliance_scores', {})
+    completeness = scores.get('policy_completeness', 100)
+    risk_cov     = scores.get('risk_coverage', 100)
+    comp_ready   = scores.get('compliance_readiness', 100)
+
+    title    = policy.get('name', pack_doc.get('topic', 'Policy Pack'))
+    subtitle = f"Sector: {sector}  |  Country: {country}  |  Risk Level: {risk_lvl}  |  ID: {pack_id}"
+
+    # ── Dark header band ──────────────────────────────────────────────────────
+    _header_band(story, 'Policy Document', title, subtitle, s, INDIGO)
+
+    # ── KPI strip ─────────────────────────────────────────────────────────────
+    _kpi_table(story, [
+        {'value': f"{completeness}%", 'label': 'Policy Complete'},
+        {'value': f"{risk_cov}%",     'label': 'Risk Coverage'},
+        {'value': f"{comp_ready}%",   'label': 'Compliance Ready'},
+        {'value': risk_lvl,           'label': 'Risk Level'},
+    ], s, accent=INDIGO)
+
+    # Procedure sub-header style (not in _make_styles to keep it lean)
+    proc_title_s = ParagraphStyle(
+        'RPProcTitle', fontName='Helvetica-Bold', fontSize=10,
+        textColor=SLATE, spaceBefore=5, spaceAfter=3, wordWrap='CJK')
+
+    # ── 1. Objective ──────────────────────────────────────────────────────────
+    _section_header(story, '1. Objective', s, INDIGO)
+    story.append(Paragraph(policy.get('objective', ''), s['body']))
+    story.append(Spacer(1, 3 * mm))
+
+    # ── 2. Scope ──────────────────────────────────────────────────────────────
+    _section_header(story, '2. Scope', s, INDIGO)
+    story.append(Paragraph(policy.get('scope', ''), s['body']))
+    story.append(Spacer(1, 3 * mm))
+
+    # ── 3. Policy Statements ──────────────────────────────────────────────────
+    stmts = policy.get('policy_statements', [])
+    if stmts:
+        _section_header(story, '3. Policy Statements', s, EMERALD)
+        for stmt in stmts:
+            story.append(Paragraph(f'*  {stmt}', s['bullet']))
+        story.append(Spacer(1, 2 * mm))
+
+    # ── 4. Procedures ─────────────────────────────────────────────────────────
+    procs = policy.get('procedures', [])
+    if procs:
+        _section_header(story, '4. Procedures', s, VIOLET)
+        for proc in procs:
+            story.append(Paragraph(proc.get('title', ''), proc_title_s))
+            for j, step in enumerate(proc.get('steps', []), 1):
+                story.append(Paragraph(f'{j}.  {step}', s['bullet']))
+            story.append(Spacer(1, 2 * mm))
+
+    # ── 5. Enforcement ────────────────────────────────────────────────────────
+    enforcement = policy.get('enforcement', '')
+    if enforcement:
+        _section_header(story, '5. Enforcement', s, ROSE)
+        story.append(Paragraph(enforcement, s['body']))
+        story.append(Spacer(1, 3 * mm))
+
+    # ── 6. Review Cycle ───────────────────────────────────────────────────────
+    review = policy.get('review_cycle', '')
+    if review:
+        _section_header(story, '6. Review Cycle', s, AMBER)
+        story.append(Paragraph(review, s['body']))
+        story.append(Spacer(1, 3 * mm))
+
+    # ── 7. Governance Structure ───────────────────────────────────────────────
+    gov = policy.get('governance_structure', [])
+    if gov:
+        _section_header(story, '7. Governance Structure', s, INDIGO)
+        gdata = [[
+            Paragraph('Role',           s['th']),
+            Paragraph('Responsibility', s['th']),
+        ]]
+        for g in gov:
+            gdata.append([
+                Paragraph(g.get('role',           ''), s['td_bold']),
+                Paragraph(g.get('responsibility', ''), s['td']),
+            ])
+        gtbl = Table(gdata, colWidths=[55 * mm, 115 * mm])
+        gtbl.setStyle(TableStyle([
+            ('BACKGROUND',     (0, 0), (-1,  0), INDIGO),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [WHITE, LIGHT_BG]),
+            ('GRID',           (0, 0), (-1, -1), 0.4, GRID_CLR),
+            ('VALIGN',         (0, 0), (-1, -1), 'TOP'),
+            ('PADDING',        (0, 0), (-1, -1), 5),
+        ]))
+        story.append(gtbl)
+        story.append(Spacer(1, 4 * mm))
+
+    # ── 8. Compliance Control Matrix ──────────────────────────────────────────
+    matrix = pack_doc.get('compliance_matrix', [])
+    if matrix:
+        _section_header(story, '8. Compliance Control Matrix', s, EMERALD)
+        mdata = [[
+            Paragraph('Framework',  s['th']),
+            Paragraph('Control ID', s['th']),
+            Paragraph('Title',      s['th']),
+            Paragraph('Coverage',   s['th']),
+        ]]
+        for c in matrix:
+            mdata.append([
+                Paragraph(c.get('framework_id', ''), s['td_bold']),
+                Paragraph(c.get('control_id',   ''), s['td']),
+                Paragraph(c.get('title',        ''), s['td']),
+                Paragraph(c.get('coverage',     ''), s['td']),
+            ])
+        mtbl = Table(mdata, colWidths=[32 * mm, 22 * mm, 88 * mm, 28 * mm])
+        mtbl.setStyle(TableStyle([
+            ('BACKGROUND',     (0, 0), (-1,  0), EMERALD),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [WHITE, rl_colors.HexColor('#f0fdf4')]),
+            ('GRID',           (0, 0), (-1, -1), 0.4, GRID_CLR),
+            ('VALIGN',         (0, 0), (-1, -1), 'TOP'),
+            ('PADDING',        (0, 0), (-1, -1), 5),
+        ]))
+        story.append(mtbl)
+        story.append(Spacer(1, 4 * mm))
+
+    # ── 9. Risk Mitigation Mapping ────────────────────────────────────────────
+    risks = pack_doc.get('risk_mapping', [])
+    if risks:
+        _section_header(story, '9. Risk Mitigation Mapping', s, AMBER)
+        rdata = [[
+            Paragraph('Risk ID',   s['th']),
+            Paragraph('Risk Type', s['th']),
+            Paragraph('Mitigation',s['th']),
+            Paragraph('Severity',  s['th']),
+        ]]
+        for r in risks:
+            rdata.append([
+                Paragraph(r.get('risk_id',    ''), s['td_bold']),
+                Paragraph(r.get('risk_type',  ''), s['td']),
+                Paragraph(r.get('mitigation', ''), s['td']),
+                Paragraph(r.get('severity',   ''), s['td']),
+            ])
+        rtbl = Table(rdata, colWidths=[22 * mm, 28 * mm, 98 * mm, 22 * mm])
+        rtbl.setStyle(TableStyle([
+            ('BACKGROUND',     (0, 0), (-1,  0), AMBER),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [WHITE, rl_colors.HexColor('#fffbeb')]),
+            ('GRID',           (0, 0), (-1, -1), 0.4, GRID_CLR),
+            ('VALIGN',         (0, 0), (-1, -1), 'TOP'),
+            ('PADDING',        (0, 0), (-1, -1), 5),
+        ]))
+        story.append(rtbl)
+
+    footer = _make_footer(INDIGO)
+    doc = _doc(buf)
+    doc.build(story, onFirstPage=footer, onLaterPages=footer)
+    return buf.getvalue()

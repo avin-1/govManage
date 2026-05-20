@@ -2227,19 +2227,24 @@ def delete_policy_pack(pack_id: str):
 @app.route("/api/policy-packs/<pack_id>/pdf", methods=["GET"])
 def get_policy_pack_pdf(pack_id: str):
     """
-    Serve the stored PDF for a policy pack as an inline application/pdf response.
-    If the pack was created before PDF storage was added, regenerate it on the fly.
+    Serve the policy pack PDF using the professional ReportLab layout
+    (dark header band, KPI strip, justified body text, page footer).
+    Always regenerates live from the stored document so any layout
+    improvements are picked up automatically on the next open/download.
     """
     from flask import Response
     pack = db.get_policy_pack(pack_id)
     if not pack:
         return jsonify({"error": "Policy pack not found"}), 404
 
-    # Always regenerate from the pack document using the current (fixed) encoder.
-    # This ensures any packs that were stored with the old broken encoder
-    # (which let non-Latin-1 chars through) are automatically corrected on the
-    # next view/download — no manual intervention required.
-    pdf_bytes = _build_pdf_bytes(pack)
+    # Primary: use the professional layout from report_pdf.py
+    pdf_bytes = b""
+    try:
+        from report_pdf import build_policy_pack_pdf
+        pdf_bytes = build_policy_pack_pdf(pack)
+    except Exception as _pdf_err:
+        print(f"[policy-pdf] report_pdf failed ({_pdf_err}), falling back to _build_pdf_bytes")
+        pdf_bytes = _build_pdf_bytes(pack)
 
     if not pdf_bytes and pack.get("pdf_base64"):
         # Fallback: serve cached blob only if live generation fails (e.g. reportlab missing)

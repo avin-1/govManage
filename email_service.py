@@ -23,9 +23,10 @@ import os
 import smtplib
 import ssl
 from datetime import datetime, timezone
+from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -70,10 +71,12 @@ def send_email(
     html_body: str,
     text_body: str = "",
     from_addr: Optional[str] = None,
+    attachments: Optional[List[Tuple[str, bytes]]] = None,
 ) -> Dict[str, Any]:
     """
-    Send a MIME multipart email via SMTP.
+    Send a MIME multipart email via SMTP with optional PDF attachments.
 
+    attachments: list of (filename, pdf_bytes) tuples.
     Returns {"ok": True} on success or {"ok": False, "error": "<message>"} on failure.
     Raises no exceptions — all errors are captured and returned.
     """
@@ -89,14 +92,32 @@ def send_email(
 
     sender = from_addr or cfg["from_addr"] or cfg["user"]
 
-    msg = MIMEMultipart("alternative")
+    # Use "mixed" when we have attachments, "alternative" when HTML-only
+    if attachments:
+        msg = MIMEMultipart("mixed")
+        alt = MIMEMultipart("alternative")
+        if text_body:
+            alt.attach(MIMEText(text_body, "plain", "utf-8"))
+        alt.attach(MIMEText(html_body, "html", "utf-8"))
+        msg.attach(alt)
+        for filename, pdf_bytes in attachments:
+            if pdf_bytes:
+                part = MIMEApplication(pdf_bytes, _subtype="pdf")
+                part.add_header(
+                    "Content-Disposition", "attachment",
+                    filename=filename,
+                )
+                msg.attach(part)
+                logger.info("[email] Attaching PDF: %s (%d bytes)", filename, len(pdf_bytes))
+    else:
+        msg = MIMEMultipart("alternative")
+        if text_body:
+            msg.attach(MIMEText(text_body, "plain", "utf-8"))
+        msg.attach(MIMEText(html_body, "html", "utf-8"))
+
     msg["Subject"] = subject
     msg["From"] = sender
     msg["To"] = ", ".join(to_addrs)
-
-    if text_body:
-        msg.attach(MIMEText(text_body, "plain", "utf-8"))
-    msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     try:
         ctx = ssl.create_default_context()
@@ -114,8 +135,14 @@ def send_email(
                 server.login(cfg["user"], cfg["password"])
                 server.sendmail(sender, to_addrs, msg.as_string())
 
-        logger.info("[email] Sent '%s' to %s", subject, to_addrs)
-        return {"ok": True, "recipients": to_addrs, "subject": subject}
+        attached_names = [a[0] for a in (attachments or [])]
+        logger.info("[email] Sent '%s' to %s (attachments: %s)", subject, to_addrs, attached_names)
+        return {
+            "ok": True,
+            "recipients": to_addrs,
+            "subject": subject,
+            "attachments": attached_names,
+        }
 
     except smtplib.SMTPAuthenticationError as exc:
         msg_str = "SMTP authentication failed. Check SMTP_USER / SMTP_PASSWORD."
@@ -438,11 +465,164 @@ def build_weekly_report_text(data: Dict[str, Any]) -> str:
 # Orchestrated send
 # ---------------------------------------------------------------------------
 
+def _generate_report_pdfs(data: Dict[str, Any]) -> List[Tuple[str, bytes]]:
+    """
+    Generate three PDF attachments for the weekly report:
+      1. compliance_report.pdf  — live compliance gap analysis
+      2. risk_report.pdf        — live risk assessment
+      3. policy_pack_<id>.pdf   — most recent policy pack (if any)
+
+    All generation errors are swallowed — a missing PDF never blocks the email.
+    """
+    attachments: List[Tuple[str, bytes]] = []
+
+    try:
+        from report_pdf import build_compliance_report_pdf, build_risk_report_pdf
+        from database import db
+        import os, json
+
+        # ── Reuse the LLM-powered report generators from app.py ──────────────
+        # We call the same logic as /api/reports/compliance and /api/reports/risk
+        # but directly (no HTTP round-trip).
+
+        # Gather context
+        frameworks = db.list_frameworks()
+        fw_ids = [f["framework_id"] for f in frameworks[:6]]  # top 6
+
+        risks = db.list_risk_library()
+        risk_ids = [r["risk_id"] for r in risks]
+
+        model_name = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+
+        try:
+            from langchain_groq import ChatGroq
+            from langchain_core.messages import HumanMessage, SystemMessage
+
+            llm = ChatGroq(model_name=model_name)
+            sys_msg = SystemMessage(content="You are a strict JSON-only API. Output only valid JSON.")
+
+            # ── Compliance report ──────────────────────────────────────────────
+            fw_names = ", ".join(f"{f['name']} ({f['framework_id']})" for f in frameworks[:6])
+            compliance_prompt = f"""Generate a weekly compliance gap report.
+Organization: govManage GRC Platform
+Sector: General
+Frameworks assessed: {fw_names}
+Total policy packs: {data.get("total_policy_packs", 0)}
+Return ONLY valid JSON matching this structure:
+{{
+  "report_title": "Weekly Compliance Gap Report",
+  "executive_summary": "<2 paragraph summary>",
+  "compliance_scores": {{
+    "overall": <0-100>,
+    "by_framework": [{{"framework": "<name>", "score": <0-100>, "status": "<Compliant|Partial|Non-Compliant>"}}]
+  }},
+  "key_findings": ["<finding>"],
+  "critical_gaps": ["<gap>"],
+  "recommendations": ["<recommendation>"],
+  "action_plan": [{{"priority": "High", "action": "<action>", "timeline": "<timeline>", "owner": "<role>"}}],
+  "maturity_level": "<Initial|Developing|Defined|Managed|Optimizing>",
+  "next_review_date": "<date>"
+}}"""
+            c_response = llm.invoke([sys_msg, HumanMessage(content=compliance_prompt)])
+            c_content = c_response.content.strip()
+            if c_content.startswith("```"):
+                c_content = c_content.split("```")[1]
+                if c_content.startswith("json"):
+                    c_content = c_content[4:]
+            c_data = json.loads(c_content.strip())
+            c_data["generated_at"] = data.get("generated_at", "")
+            c_data["framework_ids"] = fw_ids
+            c_pdf = build_compliance_report_pdf(c_data)
+            if c_pdf:
+                attachments.append(("compliance_report.pdf", c_pdf))
+                logger.info("[email] Compliance PDF generated (%d bytes)", len(c_pdf))
+
+        except Exception as exc:
+            logger.warning("[email] Compliance PDF generation failed: %s", exc)
+
+        try:
+            from langchain_groq import ChatGroq
+            from langchain_core.messages import HumanMessage, SystemMessage
+
+            llm = ChatGroq(model_name=model_name)
+            sys_msg = SystemMessage(content="You are a strict JSON-only API. Output only valid JSON.")
+
+            # ── Risk report ────────────────────────────────────────────────────
+            risk_summary = "\n".join(
+                f"[{r['risk_id']}] {r['title']} | {r['severity']} | {r['risk_type']}"
+                for r in risks[:12]
+            )
+            risk_prompt = f"""Generate a weekly risk assessment report.
+Organization: govManage GRC Platform
+Sector: General
+Risk Items:
+{risk_summary}
+High risks: {data.get("high_risk_count", 0)}, Medium: {data.get("medium_risk_count", 0)}, Low: {data.get("low_risk_count", 0)}
+Return ONLY valid JSON matching this structure:
+{{
+  "report_title": "Weekly Risk Assessment Report",
+  "executive_summary": "<2 paragraph summary>",
+  "risk_posture": "<Critical|High|Medium|Low>",
+  "overall_risk_score": <0-100>,
+  "key_findings": ["<finding>"],
+  "high_priority_risks": ["<risk title>"],
+  "risk_treatment_plan": [{{"risk_id": "<id>", "risk": "<title>", "treatment": "Mitigate", "action": "<action>", "timeline": "<timeline>"}}],
+  "residual_risks": ["<residual risk>"],
+  "recommendations": ["<recommendation>"],
+  "governance_actions": [{{"action": "<action>", "owner": "<role>", "due_date": "<date>"}}]
+}}"""
+            r_response = llm.invoke([sys_msg, HumanMessage(content=risk_prompt)])
+            r_content = r_response.content.strip()
+            if r_content.startswith("```"):
+                r_content = r_content.split("```")[1]
+                if r_content.startswith("json"):
+                    r_content = r_content[4:]
+            r_data = json.loads(r_content.strip())
+            r_data["generated_at"] = data.get("generated_at", "")
+            r_data["risk_items"] = risks[:12]
+            r_pdf = build_risk_report_pdf(r_data)
+            if r_pdf:
+                attachments.append(("risk_report.pdf", r_pdf))
+                logger.info("[email] Risk PDF generated (%d bytes)", len(r_pdf))
+
+        except Exception as exc:
+            logger.warning("[email] Risk PDF generation failed: %s", exc)
+
+        # ── Most recent policy pack PDF ────────────────────────────────────────
+        try:
+            recent = data.get("recent_packs", [])
+            if recent:
+                pack_id = recent[0].get("pack_id", "")
+                if pack_id:
+                    full_pack = db.get_policy_pack(pack_id)
+                    if full_pack:
+                        from report_pdf import build_policy_pack_pdf
+                        p_pdf = build_policy_pack_pdf(full_pack)
+                        if p_pdf:
+                            attachments.append((f"policy_{pack_id}.pdf", p_pdf))
+                            logger.info(
+                                "[email] Policy pack PDF attached: %s (%d bytes)",
+                                pack_id, len(p_pdf)
+                            )
+        except Exception as exc:
+            logger.warning("[email] Policy pack PDF generation failed: %s", exc)
+
+    except Exception as exc:
+        logger.error("[email] PDF generation outer error: %s", exc)
+
+    return attachments
+
+
 def send_weekly_report(
     recipients: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
-    Compose and dispatch the weekly GRC report email.
+    Compose and dispatch the weekly GRC report email with PDF attachments.
+
+    Attaches three PDFs:
+      • compliance_report.pdf  — LLM-generated compliance gap analysis
+      • risk_report.pdf        — LLM-generated risk assessment
+      • policy_<id>.pdf        — most recent policy pack
 
     recipients: list of email addresses; falls back to EMAIL_RECIPIENTS env var.
     Returns the result dict from send_email().
@@ -459,13 +639,19 @@ def send_weekly_report(
         logger.exception("[email] Failed to compose report data")
         return {"ok": False, "error": f"Data gathering failed: {exc}"}
 
+    # Generate PDF attachments (errors don't block the email)
+    logger.info("[email] Generating PDF report attachments...")
+    attachments = _generate_report_pdfs(data)
+    logger.info("[email] %d PDF attachment(s) ready", len(attachments))
+
     subject = f"govManage Weekly GRC Report — {data.get('generated_at', 'Weekly')}"
     html_body = build_weekly_report_html(data)
     text_body = build_weekly_report_text(data)
 
-    result = send_email(recipients, subject, html_body, text_body)
+    result = send_email(recipients, subject, html_body, text_body, attachments=attachments)
     result["report_data"] = {
         k: v for k, v in data.items()
         if k not in ("recent_packs", "recent_reports")  # keep response small
     }
+    result["pdf_attachments"] = [a[0] for a in attachments]
     return result

@@ -4,7 +4,7 @@ import type { ComplianceFramework, RiskItem } from '../types';
 import {
   ShieldCheck, AlertTriangle, Send, User, Bot, Loader2, Plus,
   Paperclip, X, FileText, ChevronDown, ChevronUp, ExternalLink,
-  Database, Globe, Search, Check, Sparkles,
+  Database, Globe, Search, Check, Sparkles, Download,
 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -567,6 +567,12 @@ export default function ReportingChat({ mode }: Props) {
   const [discoveringFw, setDiscoveringFw] = useState(false);
   const [discoveringRisk, setDiscoveringRisk] = useState(false);
 
+  // Last completed assessment — used for PDF download button
+  const [lastAssessment, setLastAssessment] = useState<{
+    docId: string; fwIds: string[]; riskIds: string[];
+  } | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
   // ── Data loading ───────────────────────────────────────────────────────────
   useEffect(() => {
     Promise.all([
@@ -811,10 +817,57 @@ export default function ReportingChat({ mode }: Props) {
         reportMsg = buildRiskReportMessage(await res.json());
       }
       setMessages(prev => [...prev, { role: 'assistant', content: reportMsg }]);
+      // Persist so the Download PDF button can re-run against same params
+      setLastAssessment({ docId: doc.id, fwIds, riskIds });
     } catch (err: any) {
       setMessages(prev => [...prev, { role: 'assistant', content: `Assessment error: ${err.message}` }]);
     } finally {
       setIsTyping(false);
+    }
+  };
+
+  // ── Download PDF of last assessment ───────────────────────────────────────
+  const handleDownloadPdf = async () => {
+    if (!lastAssessment) return;
+    setDownloadingPdf(true);
+
+    const endpoint = mode === 'compliance'
+      ? `${API_URL}/reports/compliance/pdf`
+      : `${API_URL}/reports/risk/pdf`;
+
+    const body = mode === 'compliance'
+      ? { document_id: lastAssessment.docId, framework_ids: lastAssessment.fwIds, sector: 'General' }
+      : { document_id: lastAssessment.docId, risk_ids: lastAssessment.riskIds, sector: 'General' };
+
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'PDF generation failed' }));
+        throw new Error(err.error || 'PDF generation failed');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const date = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = mode === 'compliance'
+        ? `compliance_report_${date}.pdf`
+        : `risk_report_${date}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `PDF download failed: ${err.message}`,
+      }]);
+    } finally {
+      setDownloadingPdf(false);
     }
   };
 
@@ -944,6 +997,21 @@ export default function ReportingChat({ mode }: Props) {
           </select>
 
           <input type="file" ref={fileInputRef} className="hidden" accept=".txt,.pdf,.docx" onChange={handleFileUpload} />
+
+          {lastAssessment && (
+            <button
+              className="btn-secondary px-3 flex items-center gap-1.5"
+              onClick={handleDownloadPdf}
+              disabled={downloadingPdf}
+              title={`Download ${mode === 'compliance' ? 'Compliance' : 'Risk'} Report as PDF`}
+            >
+              {downloadingPdf
+                ? <Loader2 size={14} className="animate-spin" />
+                : <Download size={14} />}
+              {downloadingPdf ? 'Generating…' : 'Download PDF'}
+            </button>
+          )}
+
           <button
             className="btn-primary px-3 flex items-center gap-1"
             onClick={() => fileInputRef.current?.click()}

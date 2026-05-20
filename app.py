@@ -2352,8 +2352,17 @@ def send_weekly_report_now():
 
 
 # ---------------------------------------------------------------------------
-# Compliance & Risk Reports
+# Compliance & Risk Reports + PDF download endpoints
 # ---------------------------------------------------------------------------
+
+try:
+    from report_pdf import build_compliance_report_pdf as _build_compliance_pdf
+    from report_pdf import build_risk_report_pdf as _build_risk_pdf
+    _report_pdf_ok = True
+except Exception as _rp_err:
+    _report_pdf_ok = False
+    print(f"[WARNING] report_pdf unavailable: {_rp_err}")
+
 
 @app.route("/api/reports/compliance", methods=["POST"])
 def generate_compliance_report():
@@ -2513,6 +2522,196 @@ Return ONLY valid JSON:
     report_json["risk_ids_assessed"] = risk_ids
     report_json["risk_items"] = risks
     return jsonify(report_json)
+
+
+@app.route("/api/reports/compliance/pdf", methods=["POST"])
+def compliance_report_pdf():
+    """
+    Generate a compliance report and return it as a downloadable PDF.
+    Accepts the same body as /api/reports/compliance.
+    """
+    from flask import Response
+
+    if not _report_pdf_ok:
+        return jsonify({"error": "PDF generation unavailable (reportlab not installed)"}), 503
+    if not ChatGroq:
+        return jsonify({"error": "LLM not available"}), 503
+
+    # Re-use the same JSON generation logic
+    body = request.get_json(silent=True) or {}
+    framework_ids = body.get("framework_ids", ["ISO_27001"])
+    pack_id = body.get("pack_id")
+    document_id = body.get("document_id")
+    organization = body.get("organization", "Organization")
+    sector = body.get("sector", "General")
+
+    policy_context = ""
+    if pack_id:
+        pack = db.get_policy_pack(pack_id)
+        if pack:
+            policy_context = f"Policy Pack: {pack.get('name')}\nSector: {pack.get('sector')}\nRisk Level: {pack.get('risk_level')}"
+    elif document_id:
+        doc = db.get_policy_document(document_id)
+        if doc:
+            policy_context = f"Policy Document: {doc.get('name')}\nSector: {doc.get('sector')}"
+
+    frameworks_text = []
+    for fw_id in framework_ids:
+        fw = db.get_framework(fw_id)
+        if fw:
+            frameworks_text.append(f"{fw['name']} — {len(fw.get('controls', []))} controls")
+
+    prompt = f"""You are a senior GRC compliance analyst. Generate a detailed compliance assessment report.
+Organization: {organization}
+Sector: {sector}
+{policy_context}
+Frameworks assessed: {', '.join(frameworks_text)}
+Return ONLY valid JSON:
+{{
+  "report_title": "<title>",
+  "executive_summary": "<2-3 paragraph executive summary>",
+  "compliance_scores": {{
+    "overall": <0-100>,
+    "by_framework": [{{"framework": "<name>", "score": <0-100>, "status": "<Compliant|Partial|Non-Compliant>"}}]
+  }},
+  "key_findings": ["<finding 1>", "<finding 2>", "<finding 3>", "<finding 4>", "<finding 5>"],
+  "critical_gaps": ["<gap 1>", "<gap 2>", "<gap 3>"],
+  "recommendations": ["<recommendation 1>", "<recommendation 2>", "<recommendation 3>", "<recommendation 4>"],
+  "action_plan": [{{"priority": "High", "action": "<action>", "timeline": "<timeline>", "owner": "<role>"}}],
+  "maturity_level": "<Initial|Developing|Defined|Managed|Optimizing>",
+  "next_review_date": "<suggested date>"
+}}"""
+
+    try:
+        model_name = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        llm = ChatGroq(model_name=model_name)
+        response = llm.invoke([
+            SystemMessage(content="You are a strict JSON-only API. Output only valid JSON, no markdown."),
+            HumanMessage(content=prompt),
+        ])
+        content = response.content.strip()
+        if content.startswith("```"):
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+        report_json = json.loads(content.strip())
+    except Exception as e:
+        return jsonify({"error": f"Report generation failed: {e}"}), 500
+
+    report_json["generated_at"] = datetime.now(timezone.utc).isoformat()
+    report_json["framework_ids"] = framework_ids
+
+    try:
+        pdf_bytes = _build_compliance_pdf(report_json)
+    except Exception as e:
+        return jsonify({"error": f"PDF rendering failed: {e}"}), 500
+
+    if not pdf_bytes:
+        return jsonify({"error": "PDF generation failed"}), 500
+
+    filename = f"compliance_report_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"
+    return Response(
+        pdf_bytes,
+        mimetype="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(pdf_bytes)),
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@app.route("/api/reports/risk/pdf", methods=["POST"])
+def risk_report_pdf():
+    """
+    Generate a risk assessment report and return it as a downloadable PDF.
+    Accepts the same body as /api/reports/risk.
+    """
+    from flask import Response
+
+    if not _report_pdf_ok:
+        return jsonify({"error": "PDF generation unavailable (reportlab not installed)"}), 503
+    if not ChatGroq:
+        return jsonify({"error": "LLM not available"}), 503
+
+    body = request.get_json(silent=True) or {}
+    risk_ids = body.get("risk_ids", [])
+    sector = body.get("sector", "General")
+    country = body.get("country", "")
+    organization = body.get("organization", "Organization")
+
+    if not risk_ids:
+        risk_ids = [r["risk_id"] for r in db.list_risk_library()]
+
+    risks = db.get_risk_library_items_by_ids(risk_ids)
+    risk_summary = "\n".join([
+        f"[{r['risk_id']}] {r['title']} | Severity: {r['severity']} | Type: {r['risk_type']} | Mitigation: {r['mitigation']}"
+        for r in risks
+    ])
+    country_ctx = f"Country context: {country}\n" if country else ""
+
+    prompt = f"""You are a senior risk management expert. Generate a comprehensive risk assessment report.
+Organization: {organization}
+Sector: {sector}
+{country_ctx}
+Risk Items Assessed:
+{risk_summary}
+Return ONLY valid JSON:
+{{
+  "report_title": "<title>",
+  "executive_summary": "<2-3 paragraph executive summary of risk posture>",
+  "risk_posture": "<Critical|High|Medium|Low>",
+  "overall_risk_score": <0-100>,
+  "key_findings": ["<finding 1>", "<finding 2>", "<finding 3>", "<finding 4>"],
+  "high_priority_risks": ["<risk title 1>", "<risk title 2>", "<risk title 3>"],
+  "risk_treatment_plan": [
+    {{"risk_id": "<id>", "risk": "<title>", "treatment": "Accept|Mitigate|Transfer|Avoid", "action": "<specific action>", "timeline": "<timeline>"}}
+  ],
+  "residual_risks": ["<residual risk 1>", "<residual risk 2>"],
+  "recommendations": ["<recommendation 1>", "<recommendation 2>", "<recommendation 3>"],
+  "governance_actions": [
+    {{"action": "<action>", "owner": "<role>", "due_date": "<timeline>"}}
+  ]
+}}"""
+
+    try:
+        model_name = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        llm = ChatGroq(model_name=model_name)
+        response = llm.invoke([
+            SystemMessage(content="You are a strict JSON-only API. Output only valid JSON, no markdown."),
+            HumanMessage(content=prompt),
+        ])
+        content = response.content.strip()
+        if content.startswith("```"):
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+        report_json = json.loads(content.strip())
+    except Exception as e:
+        return jsonify({"error": f"Risk report generation failed: {e}"}), 500
+
+    report_json["generated_at"] = datetime.now(timezone.utc).isoformat()
+    report_json["risk_ids_assessed"] = risk_ids
+    report_json["risk_items"] = risks
+
+    try:
+        pdf_bytes = _build_risk_pdf(report_json)
+    except Exception as e:
+        return jsonify({"error": f"PDF rendering failed: {e}"}), 500
+
+    if not pdf_bytes:
+        return jsonify({"error": "PDF generation failed"}), 500
+
+    filename = f"risk_report_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"
+    return Response(
+        pdf_bytes,
+        mimetype="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(pdf_bytes)),
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 # ---------------------------------------------------------------------------

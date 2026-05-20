@@ -113,21 +113,79 @@ echo ============================================================
 echo   Setup Complete!
 echo ============================================================
 echo.
-echo   To start the project, run each of these in a separate terminal:
+echo   Would you like to start the application now?
+echo.
+echo   [1] Yes - Launch everything (Backend + Agents + Frontend)
+echo   [2] No  - Exit (I'll start manually later)
+echo.
+set /p launch_choice="Enter choice [1-2]: "
+
+if "%launch_choice%"=="1" goto launch_all
+if "%launch_choice%"=="2" goto manual_instructions
+goto manual_instructions
+
+:launch_all
+echo.
+echo ============================================================
+echo   Launching govManage System...
+echo ============================================================
+echo.
+
+:: Launch Backend API (Flask app.py)
+echo [1/3] Starting Backend API (Flask)...
+start "Backend-API" cmd /k "cd /d "%~dp0" && uv run python app.py"
+timeout /t 2 /nobreak >nul
+
+:: Launch All Micro-Agents
+echo [2/3] Starting Micro-Agents...
+start "AG-Orchestrator" cmd /k "cd /d "%~dp0" && uv run python agents_micro\orchestrator\main.py"
+start "AG-PolicyAnalyst" cmd /k "cd /d "%~dp0" && uv run python agents_micro\policy_analyst\main.py"
+start "AG-Compliance" cmd /k "cd /d "%~dp0" && uv run python agents_micro\compliance\main.py"
+start "AG-RiskAssessment" cmd /k "cd /d "%~dp0" && uv run python agents_micro\risk_assessment\main.py"
+start "AG-DecisionEngine" cmd /k "cd /d "%~dp0" && uv run python agents_micro\decision_engine\main.py"
+start "AG-Audit" cmd /k "cd /d "%~dp0" && uv run python agents_micro\audit\main.py"
+start "AG-Reporting" cmd /k "cd /d "%~dp0" && uv run python agents_micro\reporting\main.py"
+start "AG-Feedback" cmd /k "cd /d "%~dp0" && uv run python agents_micro\feedback\main.py"
+start "AG-Persistence" cmd /k "cd /d "%~dp0" && uv run python agents_micro\persistence\main.py"
+timeout /t 3 /nobreak >nul
+
+:: Launch Frontend (React/Vite)
+echo [3/3] Starting Frontend (React/Vite)...
+start "Frontend-Vite" cmd /k "cd /d "%~dp0frontend" && npm run dev"
+
+echo.
+echo ============================================================
+echo   All Services Launched!
+echo ============================================================
+echo.
+echo   Backend API:  http://localhost:5000
+echo   Frontend:     http://localhost:5173
+echo.
+echo   Keep all terminal windows open for the system to work!
+echo   Close this window when done.
+echo ============================================================
+echo.
+pause
+exit /b 0
+
+:manual_instructions
+echo.
+echo ============================================================
+echo   Manual Launch Instructions
+echo ============================================================
+echo.
+echo   To start the project later, run:
 echo.
 echo   1. Backend API:
-echo      uv run uvicorn api:app --reload --port 8000
+echo      uv run python app.py
 echo.
-echo   2. Agent microservices (one terminal each):
-echo      uv run agents_micro\compliance\main.py
-echo      uv run agents_micro\policy_analyst\main.py
-echo      uv run agents_micro\risk_assessment\main.py
-echo      uv run agents_micro\decision_engine\main.py
-echo      uv run agents_micro\orchestrator\main.py
+echo   2. All Micro-Agents (use launch_agents.bat):
+echo      launch_agents.bat
 echo.
-echo   3. Frontend (React/Vite):
+echo   3. Frontend:
 echo      cd frontend ^&^& npm run dev
 echo.
+echo   Or simply run setup.bat again and choose option [1]
 echo ============================================================
 echo.
 pause

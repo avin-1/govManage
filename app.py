@@ -115,11 +115,69 @@ def _build_pdf_bytes(pack_doc: dict) -> bytes:
     EMERALD = rl_colors.HexColor('#10b981')
     AMBER   = rl_colors.HexColor('#f59e0b')
 
-    title_style = ParagraphStyle('Title', fontName='Helvetica-Bold', fontSize=18, textColor=rl_colors.HexColor('#1e293b'), spaceAfter=4)
-    sub_style   = ParagraphStyle('Sub',   fontName='Helvetica',      fontSize=9,  textColor=MUTED, spaceAfter=8)
-    h2_style    = ParagraphStyle('H2',    fontName='Helvetica-Bold', fontSize=12, textColor=INDIGO, spaceBefore=12, spaceAfter=4)
-    body_style  = ParagraphStyle('Body',  fontName='Helvetica',      fontSize=9.5,textColor=SLATE, spaceAfter=4, leading=14)
-    bullet_style= ParagraphStyle('Bullet',fontName='Helvetica',      fontSize=9.5,textColor=SLATE, spaceAfter=3, leading=13, leftIndent=12, bulletIndent=0)
+    # Define consistent styles with proper word wrapping
+    title_style = ParagraphStyle(
+        'Title', 
+        fontName='Helvetica-Bold', 
+        fontSize=18, 
+        textColor=rl_colors.HexColor('#1e293b'), 
+        spaceAfter=4,
+        wordWrap='CJK'
+    )
+    sub_style = ParagraphStyle(
+        'Sub', 
+        fontName='Helvetica', 
+        fontSize=9, 
+        textColor=MUTED, 
+        spaceAfter=8,
+        wordWrap='CJK'
+    )
+    h2_style = ParagraphStyle(
+        'H2', 
+        fontName='Helvetica-Bold', 
+        fontSize=12, 
+        textColor=INDIGO, 
+        spaceBefore=12, 
+        spaceAfter=4,
+        wordWrap='CJK'
+    )
+    body_style = ParagraphStyle(
+        'Body', 
+        fontName='Helvetica', 
+        fontSize=9.5, 
+        textColor=SLATE, 
+        spaceAfter=4, 
+        leading=14,
+        wordWrap='CJK'
+    )
+    bullet_style = ParagraphStyle(
+        'Bullet', 
+        fontName='Helvetica', 
+        fontSize=9.5, 
+        textColor=SLATE, 
+        spaceAfter=3, 
+        leading=13, 
+        leftIndent=12, 
+        bulletIndent=0,
+        wordWrap='CJK'
+    )
+    # Table cell style for consistent font in tables
+    table_cell_style = ParagraphStyle(
+        'TableCell',
+        fontName='Helvetica',
+        fontSize=8.5,
+        textColor=SLATE,
+        leading=11,
+        wordWrap='CJK'
+    )
+    table_header_style = ParagraphStyle(
+        'TableHeader',
+        fontName='Helvetica-Bold',
+        fontSize=9,
+        textColor=rl_colors.white,
+        leading=11,
+        wordWrap='CJK'
+    )
 
     policy = pack_doc.get('policy', {})
     story  = []
@@ -148,8 +206,17 @@ def _build_pdf_bytes(pack_doc: dict) -> bytes:
 
     # ── 4. PROCEDURES ────────────────────────────────────────────────────────
     story.append(Paragraph('4. Procedures', h2_style))
+    proc_title_style = ParagraphStyle(
+        'ProcTitle', 
+        fontName='Helvetica-Bold', 
+        fontSize=10, 
+        textColor=SLATE, 
+        spaceBefore=4, 
+        spaceAfter=2,
+        wordWrap='CJK'
+    )
     for proc in policy.get('procedures', []):
-        story.append(Paragraph(proc.get('title', ''), ParagraphStyle('ProcTitle', fontName='Helvetica-Bold', fontSize=10, textColor=SLATE, spaceBefore=4, spaceAfter=2)))
+        story.append(Paragraph(proc.get('title', ''), proc_title_style))
         for j, step in enumerate(proc.get('steps', []), 1):
             story.append(Paragraph(f'{j}. {step}', bullet_style))
     story.append(Spacer(1, 2*mm))
@@ -164,14 +231,20 @@ def _build_pdf_bytes(pack_doc: dict) -> bytes:
     gov = policy.get('governance_structure', [])
     if gov:
         story.append(Paragraph('7. Governance Structure', h2_style))
-        tdata = [['Role', 'Responsibility']] + [[g.get('role',''), g.get('responsibility','')] for g in gov]
+        # Wrap table cells in Paragraphs for proper text wrapping
+        tdata = [[Paragraph('Role', table_header_style), Paragraph('Responsibility', table_header_style)]]
+        for g in gov:
+            tdata.append([
+                Paragraph(g.get('role', ''), table_cell_style),
+                Paragraph(g.get('responsibility', ''), table_cell_style)
+            ])
         tbl = Table(tdata, colWidths=[55*mm, 115*mm])
         tbl.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), INDIGO), ('TEXTCOLOR', (0,0), (-1,0), rl_colors.white),
-            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('FONTSIZE', (0,0), (-1,-1), 9),
+            ('BACKGROUND', (0,0), (-1,0), INDIGO),
             ('ROWBACKGROUNDS', (0,1), (-1,-1), [rl_colors.white, rl_colors.HexColor('#f8fafc')]),
             ('GRID', (0,0), (-1,-1), 0.4, rl_colors.HexColor('#e2e8f0')),
-            ('VALIGN', (0,0), (-1,-1), 'TOP'), ('PADDING', (0,0), (-1,-1), 5),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('PADDING', (0,0), (-1,-1), 5),
         ]))
         story.append(tbl)
         story.append(Spacer(1, 4*mm))
@@ -180,15 +253,27 @@ def _build_pdf_bytes(pack_doc: dict) -> bytes:
     matrix = pack_doc.get('compliance_matrix', [])
     if matrix:
         story.append(Paragraph('8. Compliance Control Matrix', h2_style))
-        mdata = [['Framework', 'Control ID', 'Title', 'Coverage']] + \
-                [[c.get('framework_id',''), c.get('control_id',''), c.get('title',''), c.get('coverage','')] for c in matrix]
+        # Wrap table cells in Paragraphs for proper text wrapping
+        mdata = [[
+            Paragraph('Framework', table_header_style),
+            Paragraph('Control ID', table_header_style),
+            Paragraph('Title', table_header_style),
+            Paragraph('Coverage', table_header_style)
+        ]]
+        for c in matrix:
+            mdata.append([
+                Paragraph(c.get('framework_id', ''), table_cell_style),
+                Paragraph(c.get('control_id', ''), table_cell_style),
+                Paragraph(c.get('title', ''), table_cell_style),
+                Paragraph(c.get('coverage', ''), table_cell_style)
+            ])
         mtbl = Table(mdata, colWidths=[32*mm, 22*mm, 88*mm, 28*mm])
         mtbl.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), EMERALD), ('TEXTCOLOR', (0,0), (-1,0), rl_colors.white),
-            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('FONTSIZE', (0,0), (-1,-1), 8.5),
+            ('BACKGROUND', (0,0), (-1,0), EMERALD),
             ('ROWBACKGROUNDS', (0,1), (-1,-1), [rl_colors.white, rl_colors.HexColor('#f0fdf4')]),
             ('GRID', (0,0), (-1,-1), 0.4, rl_colors.HexColor('#e2e8f0')),
-            ('VALIGN', (0,0), (-1,-1), 'TOP'), ('PADDING', (0,0), (-1,-1), 4),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('PADDING', (0,0), (-1,-1), 5),
         ]))
         story.append(mtbl)
         story.append(Spacer(1, 4*mm))
@@ -197,15 +282,27 @@ def _build_pdf_bytes(pack_doc: dict) -> bytes:
     risks = pack_doc.get('risk_mapping', [])
     if risks:
         story.append(Paragraph('9. Risk Mitigation Mapping', h2_style))
-        rdata = [['Risk ID', 'Risk Type', 'Mitigation', 'Severity']] + \
-                [[r.get('risk_id',''), r.get('risk_type',''), r.get('mitigation',''), r.get('severity','')] for r in risks]
+        # Wrap table cells in Paragraphs for proper text wrapping
+        rdata = [[
+            Paragraph('Risk ID', table_header_style),
+            Paragraph('Risk Type', table_header_style),
+            Paragraph('Mitigation', table_header_style),
+            Paragraph('Severity', table_header_style)
+        ]]
+        for r in risks:
+            rdata.append([
+                Paragraph(r.get('risk_id', ''), table_cell_style),
+                Paragraph(r.get('risk_type', ''), table_cell_style),
+                Paragraph(r.get('mitigation', ''), table_cell_style),
+                Paragraph(r.get('severity', ''), table_cell_style)
+            ])
         rtbl = Table(rdata, colWidths=[22*mm, 28*mm, 98*mm, 22*mm])
         rtbl.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), AMBER), ('TEXTCOLOR', (0,0), (-1,0), rl_colors.white),
-            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('FONTSIZE', (0,0), (-1,-1), 8.5),
+            ('BACKGROUND', (0,0), (-1,0), AMBER),
             ('ROWBACKGROUNDS', (0,1), (-1,-1), [rl_colors.white, rl_colors.HexColor('#fffbeb')]),
             ('GRID', (0,0), (-1,-1), 0.4, rl_colors.HexColor('#e2e8f0')),
-            ('VALIGN', (0,0), (-1,-1), 'TOP'), ('PADDING', (0,0), (-1,-1), 4),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('PADDING', (0,0), (-1,-1), 5),
         ]))
         story.append(rtbl)
 
@@ -2116,12 +2213,15 @@ def get_policy_pack_pdf(pack_id: str):
         return jsonify({"error": "PDF generation unavailable (reportlab not installed)"}), 503
 
     filename = f"{pack_id}.pdf"
+    # ?download=1 → attachment (forces Save dialog); default → inline (viewer)
+    disposition = "attachment" if request.args.get("download") == "1" else "inline"
     return Response(
         pdf_bytes,
         mimetype="application/pdf",
         headers={
-            "Content-Disposition": f"inline; filename={filename}",
+            "Content-Disposition": f"{disposition}; filename={filename}",
             "Content-Length": str(len(pdf_bytes)),
+            "Cache-Control": "no-store",
         },
     )
 

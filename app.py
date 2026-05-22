@@ -63,6 +63,17 @@ except Exception as _rl_err:
 app = Flask(__name__)
 CORS(app)
 
+# Start the weekly email scheduler immediately on Flask boot
+try:
+    from scheduler import start_scheduler
+    _sched_started = start_scheduler()
+    if _sched_started:
+        print("[app] Weekly email scheduler started successfully.")
+    else:
+        print("[app] Weekly email scheduler failed to start (APScheduler unavailable or already running).")
+except Exception as _sched_err:
+    print(f"[app] Scheduler import error: {_sched_err}")
+
 
 # ---------------------------------------------------------------------------
 # PDF Generation Helper
@@ -3222,6 +3233,191 @@ def chat_reporting():
         import traceback
         traceback.print_exc()
         return jsonify({"error": f"LLM Agent Error: {str(e)}"}), 500
+
+
+# ---------------------------------------------------------------------------
+# Feedback & Agent Improvement System
+# ---------------------------------------------------------------------------
+
+PROMPT_CONFIG_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "agents_micro",
+    "prompt_config.json",
+)
+
+def _load_prompt_config() -> dict:
+    try:
+        with open(PROMPT_CONFIG_PATH, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {
+            "policy_analyst": {"amendment": "", "last_updated": None, "version": 1},
+            "compliance": {"amendment": "", "last_updated": None, "version": 1},
+            "risk_assessment": {"amendment": "", "last_updated": None, "version": 1},
+        }
+
+def _save_prompt_config(config: dict) -> None:
+    with open(PROMPT_CONFIG_PATH, "w") as f:
+        json.dump(config, f, indent=4)
+
+
+@app.route("/api/feedback", methods=["POST"])
+def submit_feedback():
+    """
+    Submit human feedback on an agent decision.
+    Body: { event_id, rating: 'positive'|'negative', comment, agent_involved: 'policy_analyst'|'compliance'|'risk_assessment'|'all' }
+    """
+    data = request.get_json(force=True) or {}
+    event_id = str(data.get("event_id", "")).strip() or f"general_{uuid.uuid4().hex[:8]}"
+    rating = str(data.get("rating", "")).strip()
+    comment = str(data.get("comment", "")).strip()
+    agent_involved = str(data.get("agent_involved", "all")).strip()
+
+    if rating not in ("positive", "negative"):
+        return jsonify({"error": "rating must be 'positive' or 'negative'"}), 400
+
+    feedback_doc = {
+        "feedback_id": f"fb_{uuid.uuid4().hex[:10]}",
+        "event_id": event_id,
+        "rating": rating,
+        "comment": comment,
+        "agent_involved": agent_involved,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    db.db["agent_feedback"].insert_one(dict(feedback_doc))
+    feedback_doc.pop("_id", None)
+    return jsonify({"status": "ok", "feedback": feedback_doc}), 201
+
+
+@app.route("/api/feedback", methods=["GET"])
+def list_feedback():
+    """Return all feedback entries, newest first."""
+    limit = int(request.args.get("limit", 50))
+    cursor = db.db["agent_feedback"].find({}, {"_id": 0}).sort("timestamp", -1).limit(limit)
+    return jsonify(list(cursor))
+
+
+@app.route("/api/feedback/prompts", methods=["GET"])
+def get_prompt_config():
+    """Return the current prompt amendment config for all three agents."""
+    return jsonify(_load_prompt_config())
+
+
+@app.route("/api/feedback/improve", methods=["POST"])
+def generate_improvements():
+    """
+    Analyze recent feedback and generate minimal prompt amendments using the LLM.
+    The LLM produces a 1-2 sentence surgical tweak per agent — not a rewrite.
+    Body (optional): { limit: int }  — how many recent feedback entries to consider (default 20)
+    """
+    if not ChatGroq or not os.getenv("GROQ_API_KEY"):
+        return jsonify({"error": "LLM not available — check GROQ_API_KEY"}), 503
+
+    body = request.get_json(silent=True) or {}
+    limit = int(body.get("limit", 20))
+
+    # Gather recent negative feedback (negative feedback drives improvement)
+    negative_cursor = db.db["agent_feedback"].find(
+        {"rating": "negative"}, {"_id": 0}
+    ).sort("timestamp", -1).limit(limit)
+    negative_feedback = list(negative_cursor)
+
+    # Also grab recent positive feedback for context
+    positive_cursor = db.db["agent_feedback"].find(
+        {"rating": "positive"}, {"_id": 0}
+    ).sort("timestamp", -1).limit(max(1, limit // 4))
+    positive_feedback = list(positive_cursor)
+
+    if not negative_feedback:
+        return jsonify({"status": "no_feedback", "message": "No negative feedback found to improve from. Submit some negative feedback first!"}), 200
+
+    # Format feedback for LLM
+    negative_text = "\n".join(
+        f"- [{fb.get('agent_involved','all')}] Event {fb.get('event_id')}: {fb.get('comment','(no comment)')}"
+        for fb in negative_feedback
+    )
+    positive_text = "\n".join(
+        f"- [{fb.get('agent_involved','all')}] Event {fb.get('event_id')}: {fb.get('comment','(no comment)')}"
+        for fb in positive_feedback
+    ) or "None"
+
+    prompt = f"""You are an AI meta-optimizer for a governance multi-agent system.
+You have received human feedback on past decisions made by three AI agents:
+1. policy_analyst — evaluates internal company policy conflicts
+2. compliance — checks authorization and regulatory framework adherence
+3. risk_assessment — identifies threats and calculates TVI risk scores
+
+NEGATIVE FEEDBACK (decisions humans found incorrect or poorly reasoned):
+{negative_text}
+
+POSITIVE FEEDBACK (decisions humans found correct — for context):
+{positive_text}
+
+Your task: For each of the three agents, generate a SHORT, SURGICAL improvement.
+Rules:
+- Maximum 2 sentences per agent.
+- Do NOT rewrite the entire prompt. Only add a targeted clarification or heuristic.
+- If the feedback does not suggest improvements for a specific agent, return an empty string "" for that agent.
+- Be specific and actionable, not vague.
+
+Return ONLY valid JSON with exactly these keys:
+{{
+  "policy_analyst": "<1-2 sentence amendment or empty string>",
+  "compliance": "<1-2 sentence amendment or empty string>",
+  "risk_assessment": "<1-2 sentence amendment or empty string>",
+  "improvement_rationale": "<1 sentence explaining the overall pattern in the feedback>"
+}}"""
+
+    try:
+        llm = ChatGroq(model_name=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"))
+        response = llm.invoke([
+            SystemMessage(content="You are a strict JSON-only API. Output only valid JSON, no markdown."),
+            HumanMessage(content=prompt),
+        ])
+        content = response.content.strip()
+        if content.startswith("```"):
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+            content = content.strip()
+        parsed = json.loads(content)
+    except Exception as e:
+        return jsonify({"error": f"LLM improvement generation failed: {e}"}), 500
+
+    # Update prompt_config.json with new amendments
+    now = datetime.now(timezone.utc).isoformat()
+    config = _load_prompt_config()
+    agents_updated = []
+    for agent_key in ("policy_analyst", "compliance", "risk_assessment"):
+        new_amendment = parsed.get(agent_key, "").strip()
+        if new_amendment:
+            config[agent_key]["amendment"] = new_amendment
+            config[agent_key]["last_updated"] = now
+            config[agent_key]["version"] = config[agent_key].get("version", 1) + 1
+            agents_updated.append(agent_key)
+
+    _save_prompt_config(config)
+    print(f"[Feedback/Improve] Updated amendments for: {agents_updated}")
+
+    return jsonify({
+        "status": "ok",
+        "agents_updated": agents_updated,
+        "amendments": {k: config[k]["amendment"] for k in ("policy_analyst", "compliance", "risk_assessment")},
+        "improvement_rationale": parsed.get("improvement_rationale", ""),
+        "feedback_analyzed": len(negative_feedback),
+    })
+
+
+@app.route("/api/feedback/prompts/reset", methods=["POST"])
+def reset_prompt_amendments():
+    """Reset all agent prompt amendments back to empty (factory defaults)."""
+    config = _load_prompt_config()
+    for agent_key in ("policy_analyst", "compliance", "risk_assessment"):
+        config[agent_key]["amendment"] = ""
+        config[agent_key]["last_updated"] = datetime.now(timezone.utc).isoformat()
+    _save_prompt_config(config)
+    return jsonify({"status": "ok", "message": "All agent prompt amendments have been reset."})
+
 
 if __name__ == "__main__":
     port = int(__import__("os").getenv("PORT", "5000"))

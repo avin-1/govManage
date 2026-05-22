@@ -1,0 +1,17 @@
+{
+    "policy_analyst": {
+        "amendment": "",
+        "last_updated": null,
+        "version": 1
+    },
+    "compliance": {
+        "amendment": "",
+        "last_updated": null,
+        "version": 1
+    },
+    "risk_assessment": {
+        "amendment": "",
+        "last_updated": null,
+        "version": 1
+    }
+}

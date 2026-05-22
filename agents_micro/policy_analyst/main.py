@@ -100,6 +100,20 @@ class AgentState(TypedDict):
 model_name = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 llm = ChatGroq(model_name=model_name)
 
+PROMPT_CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "prompt_config.json")
+
+def _load_prompt_amendment() -> str:
+    """Load the LLM-generated amendment for this agent from shared prompt_config.json."""
+    try:
+        with open(PROMPT_CONFIG_PATH, "r") as f:
+            config = json.load(f)
+        amendment = config.get("policy_analyst", {}).get("amendment", "").strip()
+        if amendment:
+            return f"\n\nADDITIONAL GUIDANCE (from feedback improvements):\n{amendment}"
+    except Exception:
+        pass
+    return ""
+
 
 def analyze_policy(state: AgentState):
     event_type = state.get("event_type", "")
@@ -107,6 +121,8 @@ def analyze_policy(state: AgentState):
     payload_str = json.dumps(state["payload"])
     schema_context = db.get_schema_context()
     policy_context = _get_policy_rag_context(event_type, description)
+
+    amendment = _load_prompt_amendment()
 
     prompt = f"""You are an expert Policy Analyst AI.
 {schema_context}
@@ -122,7 +138,7 @@ Return ONLY valid JSON with these exact keys:
   "policy_conflict": boolean,
   "matched_policies": list of strings (names of policies that apply),
   "policy_analysis_score": float (0.0 to 1.0, where 1.0 = highest conflict probability)
-}}"""
+}}{amendment}"""
 
     response = llm.invoke([
         SystemMessage(content="You are a strict JSON-only API. Output only valid JSON, no markdown."),

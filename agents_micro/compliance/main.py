@@ -161,6 +161,20 @@ class AgentState(TypedDict):
 model_name = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 llm = ChatGroq(model_name=model_name)
 
+PROMPT_CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "prompt_config.json")
+
+def _load_prompt_amendment() -> str:
+    """Load the LLM-generated amendment for this agent from shared prompt_config.json."""
+    try:
+        with open(PROMPT_CONFIG_PATH, "r") as f:
+            config = json.load(f)
+        amendment = config.get("compliance", {}).get("amendment", "").strip()
+        if amendment:
+            return f"\n\nADDITIONAL GUIDANCE (from feedback improvements):\n{amendment}"
+    except Exception:
+        pass
+    return ""
+
 
 def analyze_compliance(state: AgentState):
     event_type = state.get("event_type", "")
@@ -173,6 +187,8 @@ def analyze_compliance(state: AgentState):
     # Phase 4: pull applicable framework controls from MongoDB
     applicable_controls = _get_applicable_controls(event_type)
     controls_context = _format_controls_context(applicable_controls)
+
+    amendment = _load_prompt_amendment()
 
     prompt = f"""You are an expert Compliance AI for a governance platform.
 {schema_context}
@@ -195,7 +211,7 @@ Return ONLY valid JSON with these exact keys:
   "user_authorized": boolean,
   "compliance_violation": string (describe the specific violation if any; empty string "" if none),
   "matched_controls": list of strings (control IDs you evaluated, e.g. ["5.15", "GOVERN-1.2", "Art.22"])
-}}"""
+}}{amendment}"""
 
     response = llm.invoke([
         SystemMessage(content="You are a strict JSON-only API. Output only valid JSON, no markdown, no explanation."),

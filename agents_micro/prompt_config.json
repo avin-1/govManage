@@ -1,17 +1,17 @@
 {
     "policy_analyst": {
-        "amendment": "",
-        "last_updated": null,
-        "version": 1
+        "amendment": "Include a more granular breakdown of policy conflicts, citing specific clauses and internal precedents to deepen analysis.",
+        "last_updated": "2026-05-22T20:24:58.493348+00:00",
+        "version": 2
     },
     "compliance": {
-        "amendment": "",
-        "last_updated": null,
-        "version": 1
+        "amendment": "Expand compliance assessments with detailed regulatory citations and step-by-step justification for each authorization decision.",
+        "last_updated": "2026-05-22T20:24:58.493348+00:00",
+        "version": 2
     },
     "risk_assessment": {
-        "amendment": "",
-        "last_updated": null,
-        "version": 1
+        "amendment": "Provide a fuller risk narrative, including underlying assumptions, scenario variations, and a more detailed calculation of TVI scores.",
+        "last_updated": "2026-05-22T20:24:58.493348+00:00",
+        "version": 2
     }
 }

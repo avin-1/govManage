@@ -9,6 +9,12 @@ from watchdog.events import FileSystemEventHandler
 
 # Absolute paths setup
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT_DIR = os.path.dirname(BASE_DIR)
+if ROOT_DIR not in sys.path:
+    sys.path.append(ROOT_DIR)
+
+from database import db
+
 SHARED_QUEUES = os.path.join(BASE_DIR, "shared_queues")
 INBOX_DIR = os.path.join(SHARED_QUEUES, "1_inbox")
 TARGET_QUEUES = [
@@ -36,6 +42,9 @@ class InboxHandler(FileSystemEventHandler):
             
             event_id = event['event_id']
             base_filename = os.path.basename(filepath)
+            event_type = event.get('event_type', 'event')
+            
+            db.set_agent_status("orchestrator", f"Parsing event: {event_type} ({event_id[:8]})", event_id)
             
             # Write out to parallel queues 2_*
             for q_path in TARGET_QUEUES:
@@ -47,6 +56,7 @@ class InboxHandler(FileSystemEventHandler):
             
             # Move to processed
             shutil.move(filepath, os.path.join(PROCESSED_DIR, base_filename))
+            db.clear_agent_status("orchestrator")
             print(f"[Orchestrator] Finished dispatching {base_filename}")
             
         except Exception as e:

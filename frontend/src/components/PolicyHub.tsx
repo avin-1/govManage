@@ -69,21 +69,6 @@ export default function PolicyHub({ onNavigate }: Props) {
         </div>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        {kpiCards.map((k, i) => (
-          <div key={i} className="kpi-card" style={{ '--kpi-color': k.color } as React.CSSProperties}>
-            <div className="flex items-center justify-between mb-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: k.bg }}>
-                <k.icon size={18} style={{ color: k.color }} />
-              </div>
-              <TrendingUp size={14} className="text-slate-300" />
-            </div>
-            <div className="text-2xl font-black" style={{ color: k.color }}>{k.value}</div>
-            <div className="text-xs text-slate-500 font-medium mt-1">{k.label}</div>
-          </div>
-        ))}
-      </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Quick Actions */}

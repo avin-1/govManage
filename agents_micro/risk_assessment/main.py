@@ -194,6 +194,7 @@ class RiskHandler(FileSystemEventHandler):
                 "governance_maturity_score": 0.0,
             }
 
+            db.set_agent_status("risk_assessment", f"Running TVI assessment on {event_type} ({event_id[:8]})", event_id)
             result = app.invoke(initial_state)
 
             out_filename = f"risk_{event_id}.json"
@@ -204,6 +205,7 @@ class RiskHandler(FileSystemEventHandler):
                 json.dump(result, f, indent=4)
 
             shutil.move(filepath, os.path.join(PROCESSED_DIR, os.path.basename(filepath)))
+            db.clear_agent_status("risk_assessment")
             print(
                 f"[Risk] Completed: {event_id} | "
                 f"TVI={result.get('tvi_score')} ({result.get('risk_level')})"

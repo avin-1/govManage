@@ -619,64 +619,12 @@ def read_root():
 
 @app.route("/api/agent-status", methods=["GET"])
 def get_agent_status():
-    import json, time
-    queues_dir = os.path.join("agents_micro", "shared_queues")
-    activities = []
-    total_active = 0
+    activities = db.get_active_agent_statuses()
     
-    queue_labels = {
-        "1_inbox": "Orchestrator",
-        "2_compliance": "Compliance Agent",
-        "2_policy": "Policy Agent",
-        "2_risk": "Risk Assessment Agent",
-        "3_decision": "Decision Engine",
-        "4_audit": "Audit Logging",
-        "5_report": "Reporting Agent",
-        "6_feedback": "Feedback Loop"
-    }
+    # Optional formatting if needed, but db returns list of dicts with message and queue.
+    # Add an empty total_active for frontend
+    total_active = len(activities)
     
-    queue_names = list(queue_labels.keys())
-    
-    for q in queue_names:
-        q_path = os.path.join(queues_dir, q)
-        if os.path.exists(q_path):
-            try:
-                files = [f for f in os.listdir(q_path) if f.endswith(".json") and os.path.isfile(os.path.join(q_path, f))]
-                total_active += len(files)
-                
-                for f in files:
-                    file_path = os.path.join(q_path, f)
-                    try:
-                        with open(file_path, "r", encoding="utf-8") as file:
-                            data = json.load(file)
-                            event_id = data.get("event_id", f.split(".")[0])
-                            event_type = data.get("event_type", "event")
-                            
-                            action_verbs = {
-                                "1_inbox": "is routing",
-                                "2_compliance": "is assessing compliance for",
-                                "2_policy": "is generating policy for",
-                                "2_risk": "is evaluating risks for",
-                                "3_decision": "is synthesizing final decision for",
-                                "4_audit": "is committing audit log for",
-                                "5_report": "is drafting report for",
-                                "6_feedback": "is processing feedback for"
-                            }
-                            
-                            verb = action_verbs.get(q, "is processing")
-                            message = f"{queue_labels[q]} {verb} {event_type} ({event_id[:8]})"
-                            
-                            activities.append({
-                                "queue": q,
-                                "message": message,
-                                "timestamp": time.time()
-                            })
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-                
-    # Optional: could sort activities here if timestamps were actual file creation times
     return jsonify({
         "activities": activities,
         "total_active": total_active
@@ -2796,6 +2744,7 @@ Return ONLY valid JSON:
 }}"""
 
     try:
+        db.set_agent_status("reporting", "Generating comprehensive compliance report...", "compliance_report")
         model_name = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
         llm = ChatGroq(model_name=model_name)
         response = llm.invoke([
@@ -2811,6 +2760,8 @@ Return ONLY valid JSON:
         report_json = json.loads(content)
     except Exception as e:
         return jsonify({"error": f"Report generation failed: {e}"}), 500
+    finally:
+        db.clear_agent_status("reporting")
 
     report_json["generated_at"] = datetime.now(timezone.utc).isoformat()
     report_json["framework_ids"] = framework_ids
@@ -2871,6 +2822,7 @@ Return ONLY valid JSON:
 }}"""
 
     try:
+        db.set_agent_status("reporting", "Generating risk assessment report...", "risk_report")
         model_name = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
         llm = ChatGroq(model_name=model_name)
         response = llm.invoke([
@@ -2886,6 +2838,8 @@ Return ONLY valid JSON:
         report_json = json.loads(content)
     except Exception as e:
         return jsonify({"error": f"Risk report generation failed: {e}"}), 500
+    finally:
+        db.clear_agent_status("reporting")
 
     report_json["generated_at"] = datetime.now(timezone.utc).isoformat()
     report_json["risk_ids_assessed"] = risk_ids
@@ -2952,6 +2906,7 @@ Return ONLY valid JSON:
 }}"""
 
     try:
+        db.set_agent_status("reporting", "Answering compliance/risk query...", "chat_report")
         model_name = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
         llm = ChatGroq(model_name=model_name)
         response = llm.invoke([
@@ -2966,6 +2921,8 @@ Return ONLY valid JSON:
         report_json = json.loads(content.strip())
     except Exception as e:
         return jsonify({"error": f"Report generation failed: {e}"}), 500
+    finally:
+        db.clear_agent_status("reporting")
 
     report_json["generated_at"] = datetime.now(timezone.utc).isoformat()
     report_json["framework_ids"] = framework_ids
@@ -3225,8 +3182,12 @@ def chat_reporting():
                 
         agent_executor = create_react_agent(llm, tools)
         
-        result = agent_executor.invoke({"messages": chat_history})
-        final_message = result["messages"][-1].content
+        db.set_agent_status("reporting", "Answering query via AI Agent...", "chat_report")
+        try:
+            result = agent_executor.invoke({"messages": chat_history})
+            final_message = result["messages"][-1].content
+        finally:
+            db.clear_agent_status("reporting")
         
         return jsonify({"response": final_message, "citations": citations_out})
     except Exception as e:

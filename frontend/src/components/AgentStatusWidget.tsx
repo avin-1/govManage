@@ -30,9 +30,9 @@ export default function AgentStatusWidget() {
     };
 
     fetchStatus();
-    const interval = setInterval(fetchStatus, isOpen ? 2000 : 5000);
+    const interval = setInterval(fetchStatus, 1000);
     return () => clearInterval(interval);
-  }, [isOpen]);
+  }, []);
 
 
 

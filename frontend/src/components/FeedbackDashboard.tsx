@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ThumbsUp, ThumbsDown, Zap, RotateCcw, Brain, CheckCircle, AlertCircle, MessageSquare, Clock, TrendingUp } from 'lucide-react';
+import { API_URL } from '../types';
 
 interface FeedbackEntry {
   feedback_id: string;
@@ -57,8 +58,8 @@ export default function FeedbackDashboard() {
     setLoading(true);
     try {
       const [fbRes, promptRes] = await Promise.all([
-        fetch('/api/feedback?limit=50'),
-        fetch('/api/feedback/prompts'),
+        fetch(`${API_URL}/feedback?limit=50`),
+        fetch(`${API_URL}/feedback/prompts`),
       ]);
       if (fbRes.ok) setFeedbackList(await fbRes.json());
       if (promptRes.ok) setPromptConfig(await promptRes.json());
@@ -75,7 +76,7 @@ export default function FeedbackDashboard() {
     if (!formComment.trim()) return;
     setSubmitting(true);
     try {
-      const res = await fetch('/api/feedback', {
+      const res = await fetch(`${API_URL}/feedback`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -101,7 +102,7 @@ export default function FeedbackDashboard() {
     setImproving(true);
     setResult(null);
     try {
-      const res = await fetch('/api/feedback/improve', {
+      const res = await fetch(`${API_URL}/feedback/improve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ limit: 20 }),
@@ -117,7 +118,7 @@ export default function FeedbackDashboard() {
   const handleReset = async () => {
     setResetting(true);
     try {
-      await fetch('/api/feedback/prompts/reset', { method: 'POST' });
+      await fetch(`${API_URL}/feedback/prompts/reset`, { method: 'POST' });
       setResult(null);
       fetchData();
     } finally {

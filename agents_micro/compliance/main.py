@@ -272,6 +272,7 @@ class ComplianceHandler(FileSystemEventHandler):
                 "matched_controls": [],
             }
 
+            db.set_agent_status("compliance", f"Checking compliance framework for {event.get('event_type', '')} ({event_id[:8]})", event_id)
             result = app.invoke(initial_state)
 
             out_filename = f"compliance_{event_id}.json"
@@ -282,6 +283,7 @@ class ComplianceHandler(FileSystemEventHandler):
                 json.dump(result, f, indent=4)
 
             shutil.move(filepath, os.path.join(PROCESSED_DIR, os.path.basename(filepath)))
+            db.clear_agent_status("compliance")
             print(
                 f"[Compliance] Completed: {event_id} | "
                 f"authorized={result.get('user_authorized')} | "

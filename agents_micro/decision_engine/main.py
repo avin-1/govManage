@@ -88,6 +88,7 @@ class DecisionHandler(FileSystemEventHandler):
             print(f"[Decision Engine] All 3 components arrived for {event_id}. Resolving...")
             time.sleep(0.5) # Wait for complete disk write
             try:
+                db.set_agent_status("decision_engine", f"Synthesizing final decision for ({event_id[:8]})", event_id)
                 with open(pol_f, 'r') as f: pol_data = json.load(f)
                 with open(com_f, 'r') as f: com_data = json.load(f)
                 with open(rsk_f, 'r') as f: rsk_data = json.load(f)
@@ -115,6 +116,7 @@ class DecisionHandler(FileSystemEventHandler):
                 shutil.move(com_f, os.path.join(PROCESSED_DIR, os.path.basename(com_f)))
                 shutil.move(rsk_f, os.path.join(PROCESSED_DIR, os.path.basename(rsk_f)))
                 
+                db.clear_agent_status("decision_engine")
                 print(f"[Decision Engine] Completely resolved {event_id} -> {final_decision['action_taken']}")
             except Exception as e:
                 print(f"[ERROR] Failed to compile decision for {event_id}: {e}")

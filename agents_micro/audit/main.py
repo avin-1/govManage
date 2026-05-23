@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import time
 import shutil
@@ -6,6 +7,11 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT_DIR = os.path.dirname(BASE_DIR)
+if ROOT_DIR not in sys.path:
+    sys.path.append(ROOT_DIR)
+from database import db
+
 SHARED_QUEUES = os.path.join(BASE_DIR, "shared_queues")
 INBOX_DIR = os.path.join(SHARED_QUEUES, "4_audit")
 OUTBOX_DIR = os.path.join(SHARED_QUEUES, "5_report")
@@ -18,6 +24,10 @@ class AuditHandler(FileSystemEventHandler):
             time.sleep(0.5)
             with open(filepath, 'r') as f:
                 event = json.load(f)
+            
+            event_id = event.get('event_id', 'unknown')
+            db.set_agent_status("audit", f"Committing audit logs for {event_id[:8]}", event_id)
+            
             # Risk & compliance analysis (mock)
             risk_level = event.get('risk_level', 'Unknown')
             compliance_violation = event.get('compliance_violation', None)
@@ -34,8 +44,10 @@ class AuditHandler(FileSystemEventHandler):
             with open(out_file, 'w') as f:
                 json.dump(audit_summary, f, indent=4)
             # shutil.move(filepath, os.path.join(PROCESSED_DIR, os.path.basename(filepath)))
+            db.clear_agent_status("audit")
             print(f"[Audit Agent] Processed {audit_summary['event_id']}")
         except Exception as e:
+            db.clear_agent_status("audit")
             print(f"[Audit Agent ERROR] {e}")
     def on_created(self, event):
         if not event.is_directory and event.src_path.endswith('.json'):

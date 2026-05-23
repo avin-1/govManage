@@ -6,6 +6,8 @@ import {
   Paperclip, X, FileText, ChevronDown, ChevronUp, ExternalLink,
   Database, Globe, Search, Check, Sparkles, Download,
 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -37,40 +39,6 @@ type AttachmentFile = {
 type Props = {
   mode: 'compliance' | 'risk';
 };
-
-// ── Inline markdown renderer ──────────────────────────────────────────────────
-
-function renderInline(text: string) {
-  const parts = text.split('**');
-  return parts.map((p, k) => k % 2 === 1 ? <strong key={k}>{p}</strong> : p);
-}
-
-function renderMessageContent(content: string) {
-  return content.split('\n').map((line, j) => {
-    if (line.startsWith('### '))
-      return <h3 key={j} className="text-base font-bold text-slate-800 mt-3 mb-1">{line.slice(4)}</h3>;
-    if (line.startsWith('## '))
-      return <h4 key={j} className="text-sm font-bold text-slate-700 mt-2 mb-0.5">{line.slice(3)}</h4>;
-    if (line === '---' || line === '___')
-      return <hr key={j} className="border-slate-200 my-2" />;
-    if (line.startsWith('- ') || line.startsWith('* '))
-      return (
-        <div key={j} className="flex gap-1.5 min-h-[1em]">
-          <span className="text-slate-400 shrink-0 mt-0.5">•</span>
-          <span>{renderInline(line.slice(2))}</span>
-        </div>
-      );
-    const numMatch = line.match(/^(\d+)\.\s(.+)/);
-    if (numMatch)
-      return (
-        <div key={j} className="flex gap-1.5 min-h-[1em]">
-          <span className="text-slate-500 shrink-0 font-medium">{numMatch[1]}.</span>
-          <span>{renderInline(numMatch[2])}</span>
-        </div>
-      );
-    return <div key={j} className="min-h-[1em]">{renderInline(line)}</div>;
-  });
-}
 
 // ── Citation card ─────────────────────────────────────────────────────────────
 
@@ -158,7 +126,11 @@ function MessageBubble({ message, mode }: { message: Message; mode: string }) {
             ? 'bg-indigo-600 text-white rounded-br-none'
             : 'bg-white border border-slate-200 text-slate-700 rounded-bl-none shadow-sm'
         }`}>
-          {renderMessageContent(message.content)}
+          <div className="prose prose-sm max-w-none">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {message.content}
+            </ReactMarkdown>
+          </div>
         </div>
 
         {hasCitations && message.role === 'assistant' && (

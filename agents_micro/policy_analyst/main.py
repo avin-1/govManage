@@ -198,6 +198,7 @@ class PolicyHandler(FileSystemEventHandler):
                 "policy_analysis_score": 0.0,
             }
 
+            db.set_agent_status("policy_analyst", f"Analyzing policy conflicts for {event.get('event_type', '')} ({event_id[:8]})", event_id)
             result = app.invoke(initial_state)
 
             out_filename = f"policy_{event_id}.json"
@@ -208,6 +209,7 @@ class PolicyHandler(FileSystemEventHandler):
                 json.dump(result, f, indent=4)
 
             shutil.move(filepath, os.path.join(PROCESSED_DIR, os.path.basename(filepath)))
+            db.clear_agent_status("policy_analyst")
             print(f"[Policy Analyst] Completed: {event_id} | conflict={result.get('policy_conflict')} score={result.get('policy_analysis_score')}")
 
         except Exception as e:

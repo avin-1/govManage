@@ -418,6 +418,28 @@ class MongoGovDB:
             return 0.2
         return float(rows[0].get("avg_tvi", 0.2) or 0.2)
 
+    def set_agent_status(self, queue_id: str, message: str, event_id: str):
+        import time
+        self.db["live_agent_status"].update_one(
+            {"queue": queue_id},
+            {"$set": {"message": message, "event_id": event_id, "timestamp": time.time()}},
+            upsert=True
+        )
+
+    def clear_agent_status(self, queue_id: str):
+        import threading, time
+        def _delayed_clear():
+            time.sleep(2)
+            self.db["live_agent_status"].delete_one({"queue": queue_id})
+        threading.Thread(target=_delayed_clear, daemon=True).start()
+
+    def get_active_agent_statuses(self) -> List[Dict[str, Any]]:
+        import time
+        # Return statuses updated in the last 120 seconds
+        cutoff = time.time() - 120
+        cursor = self.db["live_agent_status"].find({"timestamp": {"$gt": cutoff}}, {"_id": 0})
+        return list(cursor)
+
     def get_schema_context(self) -> str:
         """Dynamically returns a prompt context describing the DB structure."""
         schema = """
